@@ -28,7 +28,7 @@ function send_discord {
 cd /home/asidani/TST-CycleGAN
 
 send_discord "[${SLURM_JOB_ID}]: Starting environment setup"
-conda create -f env.yml
+conda env create -f env.yml
 send_discord "[${SLURM_JOB_ID}]: Environment setup completed"
 
 source ~/.bashrc
