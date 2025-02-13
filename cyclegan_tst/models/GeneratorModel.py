@@ -69,7 +69,7 @@ class GeneratorModel(nn.Module):
             output_supervised = self.model(**inputs, labels=labels)
         
         inputs = inputs.to(device)
-        output = self.model.generate(**inputs, max_length=self.max_seq_length)
+        output = self.model.generate(**inputs, forced_bos_token_id = self.tokenizer.lang_code_to_id[self.tgt_lang], max_length=self.max_seq_length)
 
         with self.tokenizer.as_target_tokenizer():
             transferred_sentences = [self.tokenizer.decode(t, skip_special_tokens=True) for t in output]
@@ -92,7 +92,7 @@ class GeneratorModel(nn.Module):
             return_tensors="pt")
                 
         inputs = inputs.to(device)
-        output = self.model.generate(**inputs, max_length=self.max_seq_length)
+        output = self.model.generate(**inputs, forced_bos_token_id = self.tokenizer.lang_code_to_id[self.tgt_lang], max_length=self.max_seq_length)
         with self.tokenizer.as_target_tokenizer(): 
             transferred_sentences = [self.tokenizer.decode(t, skip_special_tokens=True) for t in output]
 
