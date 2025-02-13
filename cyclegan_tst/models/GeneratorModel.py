@@ -1,8 +1,9 @@
 from typing import List, Optional, Tuple, Union
 from torch import nn
 
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, MBartForConditionalGeneration, MBart50TokenizerFast
 from tqdm import tqdm
+from utils.utils import get_lang_code
 
 class GeneratorModel(nn.Module):
     
@@ -13,6 +14,8 @@ class GeneratorModel(nn.Module):
         max_seq_length: int = 64,
         truncation: str = "longest_first",
         padding: str = "max_length",
+        src_lang: str = "en_XX",
+        tgt_lang: str = "ro_RO"
         ):
         super(GeneratorModel, self).__init__()
         
@@ -20,10 +23,12 @@ class GeneratorModel(nn.Module):
         self.max_seq_length = max_seq_length
         self.truncation = truncation
         self.padding = padding
+        self.src_lang = get_lang_code(src_lang)
+        self.tgt_lang = get_lang_code(tgt_lang)
         
         if pretrained_path is None:
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name_or_path)
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+            self.model = MBartForConditionalGeneration.from_pretrained(model_name_or_path)
+            self.tokenizer = MBart50TokenizerFast.from_pretrained(model_name_or_path, src_lang=self.src_lang, tgt_lang=self.tgt_lang)
         else:
             self.model = AutoModelForSeq2SeqLM.from_pretrained(pretrained_path)
             self.tokenizer = AutoTokenizer.from_pretrained(f"{pretrained_path}tokenizer/")
