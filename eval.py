@@ -21,17 +21,21 @@ class Evaluator():
 
         self.bleu = evaluate.load('sacrebleu')
         self.rouge = evaluate.load('rouge')
+        self.meteor = evaluate.load('meteor')
         if args.bertscore: self.bertscore = evaluate.load('bertscore')
     
 
     def __compute_metric__(self, predictions, references, metric_name, direction=None):
         # predictions = list | references = list of lists
         scores = []
-        if metric_name in ['bleu', 'rouge', 'bertscore']:
+        if metric_name in ['bleu', 'rouge', 'bertscore', 'meteor']:
             for pred, ref in zip(predictions, references):
                 if metric_name == 'bleu':
                     res = self.bleu.compute(predictions=[pred], references=[ref])
                     scores.append(res['score'])
+                elif metric_name == 'meteor':
+                    res = self.meteor.compute(predictions=[pred], references=ref)
+                    scores.append(res['meteor'])
                 elif metric_name == 'rouge':
                     tmp_rouge1, tmp_rouge2, tmp_rougeL = [], [], []
                     for r in ref:
@@ -95,6 +99,7 @@ class Evaluator():
         real_A, real_B = [], []
         pred_A, pred_B = [], []
         scores_AB_bleu_self, scores_BA_bleu_self = [], []
+        scores_AB_meteor_self, scores_BA_meteor_self = [], []
         scores_AB_r1_self, scores_BA_r1_self, scores_AB_r2_self, scores_BA_r2_self, scores_AB_rL_self, scores_BA_rL_self = [], [], [], [], [], []
 
         for batch in mono_dl_a_eval:
@@ -105,11 +110,13 @@ class Evaluator():
             pred_B.extend(transferred)
             mono_a = [[s] for s in mono_a]
             scores_AB_bleu_self.extend(self.__compute_metric__(transferred, mono_a, 'bleu'))
+            scores_AB_meteor_self.extend(self.__compute_metric__(transferred, mono_a, 'meteor'))
             scores_rouge_self = np.array(self.__compute_metric__(transferred, mono_a, 'rouge'))
             scores_AB_r1_self.extend(scores_rouge_self[:, 0].tolist())
             scores_AB_r2_self.extend(scores_rouge_self[:, 1].tolist())
             scores_AB_rL_self.extend(scores_rouge_self[:, 2].tolist())
         avg_AB_bleu_self = np.mean(scores_AB_bleu_self)
+        avg_AB_meteteor_self = np.mean(scores_AB_meteor_self)
         avg_AB_r1_self, avg_AB_r2_self, avg_AB_rL_self = np.mean(scores_AB_r1_self), np.mean(scores_AB_r2_self), np.mean(scores_AB_rL_self)
 
         for batch in mono_dl_b_eval:
@@ -120,13 +127,16 @@ class Evaluator():
             pred_A.extend(transferred)
             mono_b = [[s] for s in mono_b]
             scores_BA_bleu_self.extend(self.__compute_metric__(transferred, mono_b, 'bleu'))
+            scores_BA_meteor_self.extend(self.__compute_metric__(transferred, mono_b, 'meteor'))
             scores_rouge_self = np.array(self.__compute_metric__(transferred, mono_b, 'rouge'))
             scores_BA_r1_self.extend(scores_rouge_self[:, 0].tolist())
             scores_BA_r2_self.extend(scores_rouge_self[:, 1].tolist())
             scores_BA_rL_self.extend(scores_rouge_self[:, 2].tolist())
         avg_BA_bleu_self = np.mean(scores_BA_bleu_self)
+        avg_BA_meteteor_self = np.mean(scores_BA_meteor_self)
         avg_BA_r1_self, avg_BA_r2_self, avg_BA_rL_self = np.mean(scores_BA_r1_self), np.mean(scores_BA_r2_self), np.mean(scores_BA_rL_self)
         avg_2dir_bleu_self = (avg_AB_bleu_self + avg_BA_bleu_self) / 2
+        avg_2dir_meteor_self = (avg_AB_meteteor_self + avg_BA_meteteor_self) / 2
 
         acc, _, _, _ = self.__compute_classif_metrics__(pred_A, pred_B)
         acc_scaled = acc * 100
@@ -134,13 +144,19 @@ class Evaluator():
         avg_acc_bleu_self_geom = (avg_2dir_bleu_self * acc_scaled)**0.5
         avg_acc_bleu_self_h = 2*avg_2dir_bleu_self*acc_scaled/(avg_2dir_bleu_self+acc_scaled+1e-6)
 
+        avg_acc_meteor_self = (avg_2dir_meteor_self + acc_scaled) / 2
+        avg_acc_meteor_self_geom = (avg_2dir_meteor_self * acc_scaled)**0.5
+        avg_acc_meteor_self_h = 2*avg_2dir_meteor_self*acc_scaled/(avg_2dir_meteor_self+acc_scaled+1e-6)
+    
         metrics = {'epoch':epoch, 'step':current_training_step,
                    'self-BLEU A->B':avg_AB_bleu_self, 'self-BLEU B->A':avg_BA_bleu_self,
                    'self-BLEU avg':avg_2dir_bleu_self,
+                   'self-METEOR A->B':avg_AB_meteteor_self, 'self-METEOR B->A':avg_BA_meteteor_self,
                    'self-ROUGE-1 A->B':avg_AB_r1_self, 'self-ROUGE-1 B->A':avg_BA_r1_self,
                    'self-ROUGE-2 A->B':avg_AB_r2_self, 'self-ROUGE-2 B->A':avg_BA_r2_self,
                    'self-ROUGE-L A->B':avg_AB_rL_self, 'self-ROUGE-L B->A':avg_BA_rL_self,
-                   'style accuracy':acc, 'acc-BLEU':avg_acc_bleu_self, 'g-acc-BLEU':avg_acc_bleu_self_geom, 'h-acc-BLEU':avg_acc_bleu_self_h}
+                   'style accuracy':acc, 'acc-BLEU':avg_acc_bleu_self, 'acc-METEOR': avg_acc_meteor_self,'g-acc-BLEU':avg_acc_bleu_self_geom, 'h-acc-BLEU':avg_acc_bleu_self_h, 
+                   'g-acc-METEOR':avg_acc_meteor_self_geom, 'h-acc-METEOR':avg_acc_meteor_self_h}
         
         if phase == 'validation':
             base_path = f"{self.args.save_base_folder}epoch_{epoch}/"

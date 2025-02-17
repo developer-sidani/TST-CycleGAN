@@ -31,16 +31,48 @@ source ~/.bashrc
 
 source activate /home/asidani/.conda/envs/cyclegan
 
-send_discord "[${SLURM_JOB_ID}]: Starting test"
+send_discord "[${SLURM_JOB_ID}]: Starting Training"
 
-/home/asidani/.conda/envs/cyclegan/bin/python3 train.py --style_a=en --style_b=de --lang=en \
-                       --path_mono_A=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/train.en --path_mono_B=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/train.de \
-                       --path_paral_A_eval=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_2016_val.en --path_paral_B_eval=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_2016_val.de --path_paral_eval_ref=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/data_flickr16_de--n_references=1 --shuffle \
-                       --generator_model_tag=facebook/mbart-large-50 --discriminator_model_tag=distilbert-base-multilingual-cased \
-                       --lambdas="10|1|1|1|0" --epochs=30 --learning_rate=5e-5 --max_sequence_length=64 --batch_size=64  \
-                       --save_base_folder=./ckpts/ --save_steps=1 --eval_strategy=epochs --eval_steps=1  --pin_memory --use_cuda_if_available
+PYTHON_PATH="/home/asidani/.conda/envs/cyclegan/bin/python3"
 
-                       send_discord "[${SLURM_JOB_ID}]: Test completed"
+
+TRAIN_PARAMS_PROVA=(
+    --style_a en
+    --style_b de
+    --lang en
+    --path_mono_A /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/train.en
+    --path_mono_B /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/train.de
+    --path_paral_A_eval /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_2016_val.en
+    --path_paral_B_eval /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_2016_val.de
+    --path_paral_eval_ref /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/data_flickr16_de/references/dev/
+    --n_references 1
+    --shuffle
+    --generator_model_tag facebook/mbart-large-50
+    --discriminator_model_tag distilbert-base-multilingual-cased
+    # --pretrained_classifier_model ./classifiers/paradetox/roberta-base_10/
+    --lambdas "10|1|1|1|0"
+    #--from_pretrained ./ckpts_paradetox/ckpts_paradetox_lambda_primo10/epoch_29/
+    --epochs 30
+    --learning_rate 5e-5
+    --max_sequence_length 64
+    --batch_size 128
+    --save_base_folder ./ckpts/
+    --save_steps 1
+    --eval_strategy epochs
+    --eval_steps 1
+    --pin_memory
+    --use_cuda_if_available
+    --comet_logging
+    # --comet_key ""
+    # --comet_workspace ""
+    #--comet_exp ""
+    # --comet_project_name ""
+)
+$PYTHON_PATH train.py "${TRAIN_PARAMS_PROVA[@]}"
+
+
+
+send_discord "[${SLURM_JOB_ID}]: Train completed"
 
 LOG_FILE="/home/asidani/logs/cyclegan/job_name_${SLURM_JOB_ID}.log"
 ERR_FILE="/home/asidani/logs/cyclegan/job_name_${SLURM_JOB_ID}.err"
