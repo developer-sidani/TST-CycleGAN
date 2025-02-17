@@ -34,8 +34,8 @@ source activate /home/asidani/.conda/envs/cyclegan
 send_discord "[${SLURM_JOB_ID}]: Starting test"
 
 /home/asidani/.conda/envs/cyclegan/bin/python3 train.py --style_a=en --style_b=de --lang=en \
-                       --path_mono_A=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/rawtrain.en --path_mono_B=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/rawtrain.de \
-                       --path_paral_A_eval=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/rawtest_2016_val.en --path_paral_B_eval=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/rawtest_2016_val.de --path_paral_eval_ref=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/rawdata_flickr16_de--n_references=1 --shuffle \
+                       --path_mono_A=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/train.en --path_mono_B=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/train.de \
+                       --path_paral_A_eval=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_2016_val.en --path_paral_B_eval=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_2016_val.de --path_paral_eval_ref=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/data_flickr16_de--n_references=1 --shuffle \
                        --generator_model_tag=facebook/mbart-large-50 --discriminator_model_tag=distilbert-base-multilingual-cased \
                        --lambdas="10|1|1|1|0" --epochs=30 --learning_rate=5e-5 --max_sequence_length=64 --batch_size=64  \
                        --save_base_folder=./ckpts/ --save_steps=1 --eval_strategy=epochs --eval_steps=1  --pin_memory --use_cuda_if_available
