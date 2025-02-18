@@ -43,7 +43,7 @@ TRAIN_PARAMS_PROVA=(
     --path_mono_B /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/train.cs
     --path_paral_A_eval /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_2016_val.en
     --path_paral_B_eval /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_2016_val.cs
-    --path_paral_eval_ref /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/val_cs
+    --path_paral_eval_ref /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/val_cs/
     --n_references 1
     --shuffle
     --generator_model_tag facebook/mbart-large-50
