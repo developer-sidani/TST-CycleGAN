@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --time=150:00:00
+#SBATCH --time=110:00:00
 #SBATCH --ntasks=1
 #SBATCH --partition=cuda
 #SBATCH --gres=gpu:1
