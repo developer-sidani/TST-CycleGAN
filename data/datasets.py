@@ -181,8 +181,8 @@ class ParallelRefDataset(Dataset):
         with open(self.dataset_path_src) as input_file:
             self.data_src = input_file.read()
             self.data_src = self.data_src.split(self.separator_src)
-        if self.style_src in ['neg', 'informal']: ref_tag = '0'
-        elif self.style_src in ['pos', 'formal']: ref_tag = '1'
+        if self.style_src in ['en']: ref_tag = '0'
+        elif self.style_src in ['de', 'fr', 'cs']: ref_tag = '1'
         self.data_ref = [[] for _ in range(len(self.data_src))]
         for i in range(self.n_ref):
             ref_path = self.dataset_path_ref+f'reference{i}.{ref_tag}.txt'
