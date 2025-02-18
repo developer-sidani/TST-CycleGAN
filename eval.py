@@ -3,6 +3,8 @@ import pandas as pd
 import pickle
 
 import os
+import sacrebleu
+
 
 import torch
 import evaluate
@@ -31,10 +33,10 @@ class Evaluator():
         if metric_name in ['bleu', 'meteor']:
             for pred, ref in zip(predictions, references):
                 if metric_name == 'bleu':
-                    res = self.bleu.compute(predictions=[pred], references=[ref])
+                    res = sacrebleu.corpus_bleu(pred,[ref])
                     scores.append(res['score'])
                 elif metric_name == 'meteor':
-                    res = self.meteor.compute(predictions=[pred], references=ref)
+                    res = self.meteor.compute(predictions=pred, references=ref)
                     scores.append(res['meteor'])
                 # elif metric_name == 'rouge':
                 #     tmp_rouge1, tmp_rouge2, tmp_rougeL = [], [], []
