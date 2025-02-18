@@ -3,7 +3,7 @@
 #SBATCH --ntasks=1
 #SBATCH --partition=cuda
 #SBATCH --gres=gpu:1
-#SBATCH --job-name=train_cyclegan
+#SBATCH --job-name=de_train_cyclegan
 #SBATCH --mem=40GB
 #SBATCH --output=/home/asidani/logs/cyclegan/job_name_%j.log
 #SBATCH --error=/home/asidani/logs/cyclegan/job_name_%j.err
@@ -43,7 +43,7 @@ TRAIN_PARAMS_PROVA=(
     --path_mono_B /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/train.de
     --path_paral_A_eval /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_2016_val.en
     --path_paral_B_eval /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_2016_val.de
-    --path_paral_eval_ref /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/data_flickr16_de/references/dev/
+    --path_paral_eval_ref /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/val_de/
     --n_references 1
     --shuffle
     --generator_model_tag facebook/mbart-large-50

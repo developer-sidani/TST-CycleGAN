@@ -3,7 +3,7 @@
 #SBATCH --ntasks=1
 #SBATCH --partition=cuda
 #SBATCH --gres=gpu:1
-#SBATCH --job-name=train_cyclegan
+#SBATCH --job-name=fr_train_cyclegan
 #SBATCH --mem=40GB
 #SBATCH --output=/home/asidani/logs/cyclegan/job_name_%j.log
 #SBATCH --error=/home/asidani/logs/cyclegan/job_name_%j.err
