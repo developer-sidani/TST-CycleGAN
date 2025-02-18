@@ -7,8 +7,7 @@
 #SBATCH --mem=40GB
 #SBATCH --output=/home/asidani/logs/cyclegan/job_name_%j.log
 #SBATCH --error=/home/asidani/logs/cyclegan/job_name_%j.err
-#SBATCH --mail-type=ALL
-#SBATCH --mail-user=ahmad.sidani@studenti.polito.it
+
 
 ###### 1 Load the module
 module load nvidia/cudasdk/11.6

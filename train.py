@@ -244,7 +244,7 @@ if args.from_pretrained is not None:
     print('Generator pretrained models loaded correctly')
 else:
     G_ab = GeneratorModel(args.generator_model_tag, max_seq_length=args.max_sequence_length, src_lang=args.style_a, tgt_lang=args.style_b)
-    G_ba = GeneratorModel(args.generator_model_tag, max_seq_length=args.max_sequence_length, max_seq_length=args.max_sequence_length, src_lang=args.style_b, tgt_lang=args.style_a)
+    G_ba = GeneratorModel(args.generator_model_tag, max_seq_length=args.max_sequence_length, src_lang=args.style_b, tgt_lang=args.style_a)
     print('Generator pretrained models not loaded - Initial weights will be used')
 
 
