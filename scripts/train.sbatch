@@ -28,11 +28,11 @@ echo "[SCRIPT]: Selected GPU ID: $CUDA_VISIBLE_DEVICES"
 
 source ~/.bashrc
 
-source activate /home/asidani/.conda/envs/cyclegan
+source activate /home/asidani/.conda/envs/cliptrans
 
 send_discord "[${SLURM_JOB_ID}]: Starting Training"
 
-PYTHON_PATH="/home/asidani/.conda/envs/cyclegan/bin/python3"
+PYTHON_PATH="/home/asidani/.conda/envs/cliptrans/bin/python3"
 
 
 TRAIN_PARAMS_PROVA=(
