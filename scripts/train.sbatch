@@ -54,7 +54,7 @@ TRAIN_PARAMS_PROVA=(
     --epochs 30
     --learning_rate 5e-5
     --max_sequence_length 64
-    --batch_size 128
+    --batch_size 16
     --num_workers 1
     --save_base_folder ./ckpts/
     --save_steps 1

@@ -46,6 +46,7 @@ parser.add_argument('--max_samples_train', type=int, dest="max_samples_train", d
 parser.add_argument('--max_samples_eval',  type=int, dest="max_samples_eval",  default=None, help='Max number of examples to retain from the evaluation set. None for all available examples.')
 parser.add_argument('--nonparal_same_size', action='store_true', dest="nonparal_same_size",  default=False, help='Whether to reduce non-parallel data to same size.')
 
+
 parser.add_argument('--path_mono_A', type=str, dest="path_mono_A", help='Path to monostyle dataset (style A) for training.')
 parser.add_argument('--path_mono_B', type=str, dest="path_mono_B", help='Path to monostyle dataset (style B) for training.')
 
@@ -332,6 +333,7 @@ if args.comet_logging:
             project_name=comet_project,
             workspace=comet_workspace,
         )
+        experiment.set_name(f"training_{args.style_a}_to_{args.style_b}")
         send_message(f"Experiment URL: {experiment.url}")
     experiment.log_parameters(hyper_params)
 else:
