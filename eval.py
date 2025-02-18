@@ -20,15 +20,15 @@ class Evaluator():
         self.experiment = experiment
 
         self.bleu = evaluate.load('sacrebleu')
-        self.rouge = evaluate.load('rouge')
+        # self.rouge = evaluate.load('rouge')
         self.meteor = evaluate.load('meteor')
-        if args.bertscore: self.bertscore = evaluate.load('bertscore')
+        # if args.bertscore: self.bertscore = evaluate.load('bertscore')
     
 
     def __compute_metric__(self, predictions, references, metric_name, direction=None):
         # predictions = list | references = list of lists
         scores = []
-        if metric_name in ['bleu', 'rouge', 'bertscore', 'meteor']:
+        if metric_name in ['bleu', 'meteor']:
             for pred, ref in zip(predictions, references):
                 if metric_name == 'bleu':
                     res = self.bleu.compute(predictions=[pred], references=[ref])
@@ -36,17 +36,17 @@ class Evaluator():
                 elif metric_name == 'meteor':
                     res = self.meteor.compute(predictions=[pred], references=ref)
                     scores.append(res['meteor'])
-                elif metric_name == 'rouge':
-                    tmp_rouge1, tmp_rouge2, tmp_rougeL = [], [], []
-                    for r in ref:
-                        res = self.rouge.compute(predictions=[pred], references=[r], use_aggregator=False)
-                        tmp_rouge1.append(res['rouge1'][0].fmeasure)
-                        tmp_rouge2.append(res['rouge2'][0].fmeasure)
-                        tmp_rougeL.append(res['rougeL'][0].fmeasure)
-                    scores.append([max(tmp_rouge1), max(tmp_rouge2), max(tmp_rougeL)])
-                elif metric_name == 'bertscore':
-                    res = self.bertscore.compute(predictions=[pred], references=[ref], lang=self.args.lang)
-                    scores.extend(res['f1'])
+                # elif metric_name == 'rouge':
+                #     tmp_rouge1, tmp_rouge2, tmp_rougeL = [], [], []
+                #     for r in ref:
+                #         res = self.rouge.compute(predictions=[pred], references=[r], use_aggregator=False)
+                #         tmp_rouge1.append(res['rouge1'][0].fmeasure)
+                #         tmp_rouge2.append(res['rouge2'][0].fmeasure)
+                #         tmp_rougeL.append(res['rougeL'][0].fmeasure)
+                #     scores.append([max(tmp_rouge1), max(tmp_rouge2), max(tmp_rougeL)])
+                # elif metric_name == 'bertscore':
+                #     res = self.bertscore.compute(predictions=[pred], references=[ref], lang=self.args.lang)
+                #     scores.extend(res['f1'])
         else:
             raise Exception(f"Metric {metric_name} is not supported.")
         return scores
@@ -100,7 +100,7 @@ class Evaluator():
         pred_A, pred_B = [], []
         scores_AB_bleu_self, scores_BA_bleu_self = [], []
         scores_AB_meteor_self, scores_BA_meteor_self = [], []
-        scores_AB_r1_self, scores_BA_r1_self, scores_AB_r2_self, scores_BA_r2_self, scores_AB_rL_self, scores_BA_rL_self = [], [], [], [], [], []
+        # scores_AB_r1_self, scores_BA_r1_self, scores_AB_r2_self, scores_BA_r2_self, scores_AB_rL_self, scores_BA_rL_self = [], [], [], [], [], []
 
         for batch in mono_dl_a_eval:
             mono_a = list(batch)
@@ -111,13 +111,13 @@ class Evaluator():
             mono_a = [[s] for s in mono_a]
             scores_AB_bleu_self.extend(self.__compute_metric__(transferred, mono_a, 'bleu'))
             scores_AB_meteor_self.extend(self.__compute_metric__(transferred, mono_a, 'meteor'))
-            scores_rouge_self = np.array(self.__compute_metric__(transferred, mono_a, 'rouge'))
-            scores_AB_r1_self.extend(scores_rouge_self[:, 0].tolist())
-            scores_AB_r2_self.extend(scores_rouge_self[:, 1].tolist())
-            scores_AB_rL_self.extend(scores_rouge_self[:, 2].tolist())
+            # scores_rouge_self = np.array(self.__compute_metric__(transferred, mono_a, 'rouge'))
+            # scores_AB_r1_self.extend(scores_rouge_self[:, 0].tolist())
+            # scores_AB_r2_self.extend(scores_rouge_self[:, 1].tolist())
+            # scores_AB_rL_self.extend(scores_rouge_self[:, 2].tolist())
         avg_AB_bleu_self = np.mean(scores_AB_bleu_self)
         avg_AB_meteteor_self = np.mean(scores_AB_meteor_self)
-        avg_AB_r1_self, avg_AB_r2_self, avg_AB_rL_self = np.mean(scores_AB_r1_self), np.mean(scores_AB_r2_self), np.mean(scores_AB_rL_self)
+        # avg_AB_r1_self, avg_AB_r2_self, avg_AB_rL_self = np.mean(scores_AB_r1_self), np.mean(scores_AB_r2_self), np.mean(scores_AB_rL_self)
 
         for batch in mono_dl_b_eval:
             mono_b = list(batch)
@@ -128,13 +128,13 @@ class Evaluator():
             mono_b = [[s] for s in mono_b]
             scores_BA_bleu_self.extend(self.__compute_metric__(transferred, mono_b, 'bleu'))
             scores_BA_meteor_self.extend(self.__compute_metric__(transferred, mono_b, 'meteor'))
-            scores_rouge_self = np.array(self.__compute_metric__(transferred, mono_b, 'rouge'))
-            scores_BA_r1_self.extend(scores_rouge_self[:, 0].tolist())
-            scores_BA_r2_self.extend(scores_rouge_self[:, 1].tolist())
-            scores_BA_rL_self.extend(scores_rouge_self[:, 2].tolist())
+            # scores_rouge_self = np.array(self.__compute_metric__(transferred, mono_b, 'rouge'))
+            # scores_BA_r1_self.extend(scores_rouge_self[:, 0].tolist())
+            # scores_BA_r2_self.extend(scores_rouge_self[:, 1].tolist())
+            # scores_BA_rL_self.extend(scores_rouge_self[:, 2].tolist())
         avg_BA_bleu_self = np.mean(scores_BA_bleu_self)
         avg_BA_meteteor_self = np.mean(scores_BA_meteor_self)
-        avg_BA_r1_self, avg_BA_r2_self, avg_BA_rL_self = np.mean(scores_BA_r1_self), np.mean(scores_BA_r2_self), np.mean(scores_BA_rL_self)
+        # avg_BA_r1_self, avg_BA_r2_self, avg_BA_rL_self = np.mean(scores_BA_r1_self), np.mean(scores_BA_r2_self), np.mean(scores_BA_rL_self)
         avg_2dir_bleu_self = (avg_AB_bleu_self + avg_BA_bleu_self) / 2
         avg_2dir_meteor_self = (avg_AB_meteteor_self + avg_BA_meteteor_self) / 2
 
@@ -152,9 +152,6 @@ class Evaluator():
                    'self-BLEU A->B':avg_AB_bleu_self, 'self-BLEU B->A':avg_BA_bleu_self,
                    'self-BLEU avg':avg_2dir_bleu_self,
                    'self-METEOR A->B':avg_AB_meteteor_self, 'self-METEOR B->A':avg_BA_meteteor_self,
-                   'self-ROUGE-1 A->B':avg_AB_r1_self, 'self-ROUGE-1 B->A':avg_BA_r1_self,
-                   'self-ROUGE-2 A->B':avg_AB_r2_self, 'self-ROUGE-2 B->A':avg_BA_r2_self,
-                   'self-ROUGE-L A->B':avg_AB_rL_self, 'self-ROUGE-L B->A':avg_BA_rL_self,
                    'style accuracy':acc, 'acc-BLEU':avg_acc_bleu_self, 'acc-METEOR': avg_acc_meteor_self,'g-acc-BLEU':avg_acc_bleu_self_geom, 'h-acc-BLEU':avg_acc_bleu_self_h, 
                    'g-acc-METEOR':avg_acc_meteor_self_geom, 'h-acc-METEOR':avg_acc_meteor_self_h}
         
@@ -214,9 +211,11 @@ class Evaluator():
         ref_A, ref_B = [], []
         scores_AB_bleu_self, scores_BA_bleu_self = [], []
         scores_AB_bleu_ref, scores_BA_bleu_ref = [], []
-        scores_AB_r1_self, scores_BA_r1_self, scores_AB_r2_self, scores_BA_r2_self, scores_AB_rL_self, scores_BA_rL_self = [], [], [], [], [], []
-        scores_AB_r1_ref, scores_BA_r1_ref, scores_AB_r2_ref, scores_BA_r2_ref, scores_AB_rL_ref, scores_BA_rL_ref = [], [], [], [], [], []
-        scores_AB_bscore, scores_BA_bscore = [], []
+        scores_AB_meteor_self, scores_BA_meteor_self = [], []
+        scores_AB_meteor_ref, scores_BA_meteor_ref = [], []
+        # scores_AB_r1_self, scores_BA_r1_self, scores_AB_r2_self, scores_BA_r2_self, scores_AB_rL_self, scores_BA_rL_self = [], [], [], [], [], []
+        # scores_AB_r1_ref, scores_BA_r1_ref, scores_AB_r2_ref, scores_BA_r2_ref, scores_AB_rL_ref, scores_BA_rL_ref = [], [], [], [], [], []
+        # scores_AB_bscore, scores_BA_bscore = [], []
 
         for batch in parallel_dl_evalAB:
             parallel_a = list(batch[0])
@@ -231,21 +230,25 @@ class Evaluator():
             parallel_a = [[s] for s in parallel_a]
             scores_AB_bleu_self.extend(self.__compute_metric__(transferred, parallel_a, 'bleu'))
             scores_AB_bleu_ref.extend(self.__compute_metric__(transferred, references_b, 'bleu'))
-            scores_rouge_self = np.array(self.__compute_metric__(transferred, parallel_a, 'rouge'))
-            scores_AB_r1_self.extend(scores_rouge_self[:, 0].tolist())
-            scores_AB_r2_self.extend(scores_rouge_self[:, 1].tolist())
-            scores_AB_rL_self.extend(scores_rouge_self[:, 2].tolist())
-            scores_rouge_ref = np.array(self.__compute_metric__(transferred, references_b, 'rouge'))
-            scores_AB_r1_ref.extend(scores_rouge_ref[:, 0].tolist())
-            scores_AB_r2_ref.extend(scores_rouge_ref[:, 1].tolist())
-            scores_AB_rL_ref.extend(scores_rouge_ref[:, 2].tolist())
-            if self.args.bertscore: scores_AB_bscore.extend(self.__compute_metric__(transferred, references_b, 'bertscore'))
-            else: scores_AB_bscore.extend([0])
+            scores_AB_meteor_self.extend(self.__compute_metric__(transferred, parallel_a, 'meteor'))
+            scores_AB_meteor_ref.extend(self.__compute_metric__(transferred, references_b, 'meteor'))
+            # scores_rouge_self = np.array(self.__compute_metric__(transferred, parallel_a, 'rouge'))
+            # scores_AB_r1_self.extend(scores_rouge_self[:, 0].tolist())
+            # scores_AB_r2_self.extend(scores_rouge_self[:, 1].tolist())
+            # scores_AB_rL_self.extend(scores_rouge_self[:, 2].tolist())
+            # scores_rouge_ref = np.array(self.__compute_metric__(transferred, references_b, 'rouge'))
+            # scores_AB_r1_ref.extend(scores_rouge_ref[:, 0].tolist())
+            # scores_AB_r2_ref.extend(scores_rouge_ref[:, 1].tolist())
+            # scores_AB_rL_ref.extend(scores_rouge_ref[:, 2].tolist())
+            # if self.args.bertscore: scores_AB_bscore.extend(self.__compute_metric__(transferred, references_b, 'bertscore'))
+            # else: scores_AB_bscore.extend([0])
         avg_AB_bleu_self, avg_AB_bleu_ref = np.mean(scores_AB_bleu_self), np.mean(scores_AB_bleu_ref)
         avg_AB_bleu_geom = (avg_AB_bleu_self*avg_AB_bleu_ref)**0.5
-        avg_AB_r1_self, avg_AB_r2_self, avg_AB_rL_self = np.mean(scores_AB_r1_self), np.mean(scores_AB_r2_self), np.mean(scores_AB_rL_self)
-        avg_AB_r1_ref, avg_AB_r2_ref, avg_AB_rL_ref = np.mean(scores_AB_r1_ref), np.mean(scores_AB_r2_ref), np.mean(scores_AB_rL_ref)
-        avg_AB_bscore = np.mean(scores_AB_bscore)
+        avg_AB_meteteor_self, avg_AB_meteteor_ref = np.mean(scores_AB_meteor_self), np.mean(scores_AB_meteor_ref)
+        avg_AB_meteteor_geom = (avg_AB_meteteor_self*avg_AB_meteteor_ref)**0.5
+        # avg_AB_r1_self, avg_AB_r2_self, avg_AB_rL_self = np.mean(scores_AB_r1_self), np.mean(scores_AB_r2_self), np.mean(scores_AB_rL_self)
+        # avg_AB_r1_ref, avg_AB_r2_ref, avg_AB_rL_ref = np.mean(scores_AB_r1_ref), np.mean(scores_AB_r2_ref), np.mean(scores_AB_rL_ref)
+        # avg_AB_bscore = np.mean(scores_AB_bscore)
 
         for batch in parallel_dl_evalBA:
             parallel_b = list(batch[0])
@@ -260,35 +263,37 @@ class Evaluator():
             parallel_b = [[s] for s in parallel_b]
             scores_BA_bleu_self.extend(self.__compute_metric__(transferred, parallel_b, 'bleu'))
             scores_BA_bleu_ref.extend(self.__compute_metric__(transferred, references_a, 'bleu'))
-            scores_rouge_self = np.array(self.__compute_metric__(transferred, parallel_b, 'rouge'))
-            scores_BA_r1_self.extend(scores_rouge_self[:, 0].tolist())
-            scores_BA_r2_self.extend(scores_rouge_self[:, 1].tolist())
-            scores_BA_rL_self.extend(scores_rouge_self[:, 2].tolist())
-            scores_rouge_ref = np.array(self.__compute_metric__(transferred, references_a, 'rouge'))
-            scores_BA_r1_ref.extend(scores_rouge_ref[:, 0].tolist())
-            scores_BA_r2_ref.extend(scores_rouge_ref[:, 1].tolist())
-            scores_BA_rL_ref.extend(scores_rouge_ref[:, 2].tolist())
-            if self.args.bertscore: scores_BA_bscore.extend(self.__compute_metric__(transferred, references_a, 'bertscore'))
-            else: scores_BA_bscore.extend([0])
+            scores_BA_meteor_self.extend(self.__compute_metric__(transferred, parallel_b, 'meteor'))
+            scores_BA_meteor_ref.extend(self.__compute_metric__(transferred, references_a, 'meteor'))
+            # scores_rouge_self = np.array(self.__compute_metric__(transferred, parallel_b, 'rouge'))
+            # scores_BA_r1_self.extend(scores_rouge_self[:, 0].tolist())
+            # scores_BA_r2_self.extend(scores_rouge_self[:, 1].tolist())
+            # scores_BA_rL_self.extend(scores_rouge_self[:, 2].tolist())
+            # scores_rouge_ref = np.array(self.__compute_metric__(transferred, references_a, 'rouge'))
+            # scores_BA_r1_ref.extend(scores_rouge_ref[:, 0].tolist())
+            # scores_BA_r2_ref.extend(scores_rouge_ref[:, 1].tolist())
+            # scores_BA_rL_ref.extend(scores_rouge_ref[:, 2].tolist())
+            # if self.args.bertscore: scores_BA_bscore.extend(self.__compute_metric__(transferred, references_a, 'bertscore'))
+            # else: scores_BA_bscore.extend([0])
         avg_BA_bleu_self, avg_BA_bleu_ref = np.mean(scores_BA_bleu_self), np.mean(scores_BA_bleu_ref)
         avg_BA_bleu_geom = (avg_BA_bleu_self*avg_BA_bleu_ref)**0.5
-        avg_BA_r1_self, avg_BA_r2_self, avg_BA_rL_self = np.mean(scores_BA_r1_self), np.mean(scores_BA_r2_self), np.mean(scores_BA_rL_self)
-        avg_BA_r1_ref, avg_BA_r2_ref, avg_BA_rL_ref = np.mean(scores_BA_r1_ref), np.mean(scores_BA_r2_ref), np.mean(scores_BA_rL_ref)
-        avg_BA_bscore = np.mean(scores_BA_bscore)
+        avg_BA_meteteor_self, avg_BA_meteteor_ref = np.mean(scores_BA_meteor_self), np.mean(scores_BA_meteor_ref)
+        avg_BA_meteteor_geom = (avg_BA_meteteor_self*avg_BA_meteteor_ref)**0.5
+        # avg_BA_r1_self, avg_BA_r2_self, avg_BA_rL_self = np.mean(scores_BA_r1_self), np.mean(scores_BA_r2_self), np.mean(scores_BA_rL_self)
+        # avg_BA_r1_ref, avg_BA_r2_ref, avg_BA_rL_ref = np.mean(scores_BA_r1_ref), np.mean(scores_BA_r2_ref), np.mean(scores_BA_rL_ref)
+        # avg_BA_bscore = np.mean(scores_BA_bscore)
         avg_2dir_bleu_ref = (avg_AB_bleu_ref + avg_BA_bleu_ref) / 2
+        avg_2dir_meteor_ref = (avg_AB_meteteor_ref + avg_BA_meteteor_ref) / 2
 
         metrics = {'epoch':epoch, 'step':current_training_step,
                    'self-BLEU A->B':avg_AB_bleu_self, 'self-BLEU B->A':avg_BA_bleu_self,
                    'ref-BLEU A->B':avg_AB_bleu_ref, 'ref-BLEU B->A':avg_BA_bleu_ref,
                    'ref-BLEU avg':avg_2dir_bleu_ref,
-                   'g-BLEU A->B':avg_AB_bleu_geom, 'g-BLEU B->A':avg_BA_bleu_geom,
-                   'self-ROUGE-1 A->B':avg_AB_r1_self, 'self-ROUGE-1 B->A':avg_BA_r1_self,
-                   'self-ROUGE-2 A->B':avg_AB_r2_self, 'self-ROUGE-2 B->A':avg_BA_r2_self,
-                   'self-ROUGE-L A->B':avg_AB_rL_self, 'self-ROUGE-L B->A':avg_BA_rL_self,
-                   'ref-ROUGE-1 A->B':avg_AB_r1_ref, 'ref-ROUGE-1 B->A':avg_BA_r1_ref,
-                   'ref-ROUGE-2 A->B':avg_AB_r2_ref, 'ref-ROUGE-2 B->A':avg_BA_r2_ref,
-                   'ref-ROUGE-L A->B':avg_AB_rL_ref, 'ref-ROUGE-L B->A':avg_BA_rL_ref,
-                   'BERTScore A->B':avg_AB_bscore, 'BERTScore B->A':avg_BA_bscore}
+                   'g-BLEU A->B':avg_AB_bleu_geom, 'g-BLEU B->A':avg_BA_bleu_geom, 
+                   'self-METEOR A->B':avg_AB_meteteor_self, 'self-METEOR B->A':avg_BA_meteteor_self,
+                   'ref-METEOR A->B':avg_AB_meteteor_ref, 'ref-METEOR B->A':avg_BA_meteteor_ref,
+                   'ref-METEOR avg':avg_2dir_meteor_ref,
+                   }
 
         if phase == 'test':
             acc, prec, rec, f1 = self.__compute_classif_metrics__(pred_A, pred_B)
