@@ -1,4 +1,5 @@
 from comet_ml import Experiment, ExistingExperiment
+from dotenv import load_dotenv
 
 from data.datasets import MonostyleDataset, ParallelRefDataset
 from cyclegan_tst.models.CycleGANModel import CycleGANModel
@@ -322,11 +323,16 @@ if args.comet_logging:
     if args.from_pretrained is not None:
         experiment = ExistingExperiment(api_key=args.comet_key, previous_experiment=args.comet_exp)
     else:
+        load_dotenv()
+        comet_api_key = os.getenv('COMET_API_KEY')
+        comet_project = os.getenv('COMET_PROJECT_NAME')
+        comet_workspace = os.getenv('COMET_WORKSPACE')
         experiment = Experiment(
-            api_key=args.comet_key,
-            project_name=args.comet_project_name,
-            workspace=args.comet_workspace,
+            api_key=comet_api_key,
+            project_name=comet_project,
+            workspace=comet_workspace,
         )
+        send_message(f"Experiment URL: {experiment.url}")
     experiment.log_parameters(hyper_params)
 else:
     experiment = None

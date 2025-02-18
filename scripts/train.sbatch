@@ -51,10 +51,10 @@ TRAIN_PARAMS_PROVA=(
     # --pretrained_classifier_model ./classifiers/paradetox/roberta-base_10/
     --lambdas "10|1|1|1|0"
     #--from_pretrained ./ckpts_paradetox/ckpts_paradetox_lambda_primo10/epoch_29/
-    --epochs 2
+    --epochs 30
     --learning_rate 5e-5
     --max_sequence_length 64
-    --batch_size 16
+    --batch_size 128
     --num_workers 1
     --save_base_folder ./ckpts/
     --save_steps 1
@@ -62,7 +62,7 @@ TRAIN_PARAMS_PROVA=(
     --eval_steps 1
     --pin_memory
     --use_cuda_if_available
-    # --comet_logging
+    --comet_logging
     # --comet_key ""
     # --comet_workspace ""
     #--comet_exp ""

@@ -4,6 +4,7 @@ import torch
 import evaluate
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+import subprocess
 
 
 class ClassifierDataset(torch.utils.data.Dataset):
@@ -37,6 +38,42 @@ def read_data(path, split, max_samples=None, lowercase=False):
             data.extend(data_tmp)
             labels.extend(labels_tmp)
     return data, labels
+
+def send_message(message):
+    """
+    Executes a Python script with a message as an argument.
+
+    Args:
+        message (str): The message to pass to the script.
+
+    Returns:
+        tuple: A tuple containing (stdout, stderr) as decoded strings.
+
+    Raises:
+        RuntimeError: If the script exits with a non-zero status.
+    """
+    try:
+        # Expand `~` to the home directory
+        script_path = os.path.expanduser("~/message.py")
+        
+        # Prepare the command
+        command = ["python3", script_path, message]
+        
+        # Run the Python script
+        result = subprocess.run(
+            command,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+
+        # Decode and return stdout and stderr
+        return result.stdout.decode(), result.stderr.decode()
+
+    except subprocess.CalledProcessError as e:
+        # Raise an exception with detailed error information
+        raise RuntimeError(f"Error executing script: {e.stderr.decode()}") from e
+    
 
 def get_lang_code(lang):
 	LANG_MAP = {
