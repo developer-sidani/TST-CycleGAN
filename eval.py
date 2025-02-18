@@ -394,7 +394,7 @@ class Evaluator():
                     ['they will tell you though .', 'they will tell you the details', 'they will tell you though .', 'they will tell you'],
                     ['she seemed happy to be there', 'she was cheerful being there .', 'she was happy because being here', 'she was happy being there']]
         scores = []
-        for pred, ref in zip(predictions, references):
-            res = self.bertscore.compute(predictions=[pred], references=[ref], lang=self.args.lang)
-            scores.append(res['f1'])
+        # for pred, ref in zip(predictions, references):
+        #     res = self.bertscore.compute(predictions=[pred], references=[ref], lang=self.args.lang)
+        #     scores.append(res['f1'])
         print('Dummy BERTScore computation end')
