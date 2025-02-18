@@ -52,7 +52,7 @@ TRAIN_PARAMS_PROVA=(
     # --pretrained_classifier_model ./classifiers/paradetox/roberta-base_10/
     --lambdas "10|1|1|1|0"
     #--from_pretrained ./ckpts_paradetox/ckpts_paradetox_lambda_primo10/epoch_29/
-    --epochs 30
+    --epochs 2
     --learning_rate 5e-5
     --max_sequence_length 64
     --batch_size 128
