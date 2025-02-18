@@ -62,7 +62,7 @@ TRAIN_PARAMS_PROVA=(
     --eval_steps 1
     --pin_memory
     --use_cuda_if_available
-    --comet_logging
+    # --comet_logging
     # --comet_key ""
     # --comet_workspace ""
     #--comet_exp ""
