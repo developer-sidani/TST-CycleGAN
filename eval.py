@@ -34,7 +34,7 @@ class Evaluator():
             for pred, ref in zip(predictions, references):
                 print("pred, ref:",pred, ref)
                 if metric_name == 'bleu':
-                    res = self.bleu.compute(predictions=[pred], references=ref).score
+                    res = sacrebleu.corpus_bleu(predictions=[pred], references=ref).score
                     scores.append(res)
                 elif metric_name == 'meteor':
                     res = self.meteor.compute(predictions=[pred], references=ref)['meteor']
