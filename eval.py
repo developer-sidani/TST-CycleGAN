@@ -32,11 +32,12 @@ class Evaluator():
         scores = []
         if metric_name in ['bleu', 'meteor']:
             for pred, ref in zip(predictions, references):
+                print("pred, ref:",pred, ref)
                 if metric_name == 'bleu':
-                    res = sacrebleu.corpus_bleu(pred,[ref]).score
+                    res = self.bleu.compute(predictions=[pred], references=[ref]).score
                     scores.append(res)
                 elif metric_name == 'meteor':
-                    res = self.meteor.compute(predictions=pred, references=ref)['meteor']
+                    res = self.meteor.compute(predictions=[pred], references=ref)['meteor']
                     scores.append(100 * res)
                 # elif metric_name == 'rouge':
                 #     tmp_rouge1, tmp_rouge2, tmp_rougeL = [], [], []
