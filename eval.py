@@ -39,7 +39,7 @@ class Evaluator():
                 elif metric_name == 'meteor':
                     tmp_meteor = []
                     for r in ref:
-                        res = self.meteor.compute(predictions=pred, references=r)['meteor']
+                        res = self.meteor.compute(predictions=[pred], references=[r])['meteor']
                         tmp_meteor.append(100 * res)
                     scores.append(max(tmp_meteor))
                     # res = self.meteor.compute(predictions=pred, references=ref[0])['meteor']
