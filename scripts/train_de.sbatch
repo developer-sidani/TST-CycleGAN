@@ -49,14 +49,14 @@ TRAIN_PARAMS_PROVA=(
     --generator_model_tag facebook/mbart-large-50
     --discriminator_model_tag distilbert-base-multilingual-cased
     # --pretrained_classifier_model ./classifiers/paradetox/roberta-base_10/
-    --lambdas "10|1|1|1|0"
-    #--from_pretrained ./ckpts_paradetox/ckpts_paradetox_lambda_primo10/epoch_29/
+    --lambdas "1|1|1|1|0"
+    # --from_pretrained /home/asidani/TST-CycleGAN/ckpts_de_3e5/epoch_8/
     --epochs 30
-    --learning_rate 1e-5
+    --learning_rate 3e-5
     --max_sequence_length 64
     --batch_size 16
     --num_workers 1
-    --save_base_folder ./ckpts/
+    --save_base_folder ./ckpts_3e5/
     --save_steps 1
     --eval_strategy epochs
     --eval_steps 1
@@ -65,7 +65,7 @@ TRAIN_PARAMS_PROVA=(
     --comet_logging
     # --comet_key ""
     # --comet_workspace ""
-    #--comet_exp ""
+    # --comet_exp 0c64646eeb15495b8dbc04ccaad3db31
     # --comet_project_name ""
 )
 $PYTHON_PATH train.py "${TRAIN_PARAMS_PROVA[@]}"

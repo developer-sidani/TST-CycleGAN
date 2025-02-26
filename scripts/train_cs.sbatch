@@ -49,7 +49,7 @@ TRAIN_PARAMS_PROVA=(
     --generator_model_tag facebook/mbart-large-50
     --discriminator_model_tag distilbert-base-multilingual-cased
     # --pretrained_classifier_model ./classifiers/paradetox/roberta-base_10/
-    --lambdas "10|1|1|1|0"
+    --lambdas "1|1|1|1|0"
     #--from_pretrained ./ckpts_paradetox/ckpts_paradetox_lambda_primo10/epoch_29/
     --epochs 30
     --learning_rate 1e-5

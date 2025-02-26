@@ -37,6 +37,7 @@ parser.add_argument('--style_a', type=str, dest="style_a", help='style A for the
 parser.add_argument('--style_b', type=str, dest="style_b", help='style B for the style transfer task (target style for G_ab).')
 parser.add_argument('--lang', type=str, dest="lang", default='en', help='Dataset language.')
 parser.add_argument('--max_samples_test',  type=int, dest="max_samples_test",  default=None, help='Max number of examples to retain from the test set. None for all available examples.')
+parser.add_argument('--test_ds', type=str, dest="test_ds", default='flickr_2016', help='Test dataset.')
 
 parser.add_argument('--path_mono_A_test', type=str, dest="path_mono_A_test", help='Path to non-parallel dataset (style A) for test.')
 parser.add_argument('--path_mono_B_test', type=str, dest="path_mono_B_test", help='Path to non-parallel dataset (style B) for test.')
@@ -162,9 +163,16 @@ else:
     print (f"Mono B test (batches): {len(mono_dl_b_test)}")
 
 if args.comet_logging :
+    from dotenv import load_dotenv
+    load_dotenv()
+    args.comet_key = os.getenv('COMET_API_KEY')
+    args.comet_workspace = os.getenv('COMET_WORKSPACE')
+    args.comet_project_name = os.getenv('COMET_PROJECT_NAME')
     experiment = Experiment(api_key=args.comet_key,
                             project_name=args.comet_project_name,
                             workspace=args.comet_workspace)
+    experiment.set_name(f"testing_{args.style_a}_to_{args.style_b}_{args.test_ds}")
+    send_message(f"Experiment URL: {experiment.url}")
     experiment.log_parameters(hyper_params)
 else:
     experiment = None
@@ -192,15 +200,15 @@ else:
 
 for checkpoint, epoch in zip(checkpoints_paths, epochs):
     if args.from_pretrained is not None:
-        G_ab = GeneratorModel(args.generator_model_tag, f'{checkpoint}G_ab/', max_seq_length=args.max_sequence_length)
-        G_ba = GeneratorModel(args.generator_model_tag, f'{checkpoint}G_ba/', max_seq_length=args.max_sequence_length)
+        G_ab = GeneratorModel(args.generator_model_tag, f'{checkpoint}G_ab/', max_seq_length=args.max_sequence_length, src_lang=args.style_a, tgt_lang=args.style_b)
+        G_ba = GeneratorModel(args.generator_model_tag, f'{checkpoint}G_ba/', max_seq_length=args.max_sequence_length, src_lang=args.style_b, tgt_lang=args.style_a)
         print('Generator pretrained models loaded correctly')
         D_ab = DiscriminatorModel(args.discriminator_model_tag, f'{checkpoint}D_ab/', max_seq_length=args.max_sequence_length)
         D_ba = DiscriminatorModel(args.discriminator_model_tag, f'{checkpoint}D_ba/', max_seq_length=args.max_sequence_length)
         print('Discriminator pretrained models loaded correctly')
     else:
-        G_ab = GeneratorModel(args.generator_model_tag, max_seq_length=args.max_sequence_length)
-        G_ba = GeneratorModel(args.generator_model_tag, max_seq_length=args.max_sequence_length)
+        G_ab = GeneratorModel(args.generator_model_tag, max_seq_length=args.max_sequence_length, src_lang=args.style_a, tgt_lang=args.style_b)
+        G_ba = GeneratorModel(args.generator_model_tag, max_seq_length=args.max_sequence_length, src_lang=args.style_b, tgt_lang=args.style_a)
         print('Generator pretrained models not loaded - Initial weights will be used')
         D_ab = DiscriminatorModel(args.discriminator_model_tag, max_seq_length=args.max_sequence_length)
         D_ba = DiscriminatorModel(args.discriminator_model_tag, max_seq_length=args.max_sequence_length)
