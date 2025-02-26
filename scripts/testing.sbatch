@@ -1,19 +1,31 @@
 #!/bin/bash
 #SBATCH --time=110:00:00
 #SBATCH --ntasks=1
-#SBATCH --partition=global
+#SBATCH --partition=cuda
+#SBATCH --gres=gpu:1
 #SBATCH --job-name=de_test_cyclegan
 #SBATCH --mem=40GB
 #SBATCH --output=/home/asidani/logs/cyclegan/job_name_%j.log
 #SBATCH --error=/home/asidani/logs/cyclegan/job_name_%j.err
 
 
+
 ###### 1 Load the module
+module load nvidia/cudasdk/11.6
 module load intel/python/3
 
 function send_discord {
     python3 /home/asidani/message.py "$@"
 }
+
+
+echo "[SCRIPT]: Checking GPU availability"
+which nvidia-smi || echo "nvidia-smi not found"
+nvidia-smi || echo "Unable to run nvidia-smi"  
+
+# Select GPU with least memory usage
+export CUDA_VISIBLE_DEVICES=$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits | awk '{ print NR-1 " " $1 }' | sort -k2 -n | tail -n1 | awk '{ print $1 }')
+echo "[SCRIPT]: Selected GPU ID: $CUDA_VISIBLE_DEVICES"
 
 source ~/.bashrc
 
@@ -27,7 +39,7 @@ PYTHON_PATH="/home/asidani/.conda/envs/cliptrans/bin/python3"
 
 
 # test_ds=("flickr_2016" "flickr_2017" "flickr_2018" "flickr_2019" "flickr_2020")
-test_ds=("flickr_2016")
+test_ds=("2016_flickr")
 
 for ds in "${test_ds[@]}"; do
     TEST_PARAMS=(
@@ -35,8 +47,8 @@ for ds in "${test_ds[@]}"; do
         --style_b de
         --lang en
         --from_pretrained /home/asidani/TST-CycleGAN/ckpts_de_new/epoch_28/
-        --path_paral_A_test=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/$ds.en
-        --path_paral_B_test=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/$ds.de
+        --path_paral_A_test=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_$ds.en
+        --path_paral_B_test=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_$ds.de
         --path_paral_test_ref=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/de/$ds/
         --n_references=1
         --generator_model_tag facebook/mbart-large-50
