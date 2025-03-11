@@ -31,7 +31,7 @@ class GeneratorModel(nn.Module):
             self.tokenizer = MBart50TokenizerFast.from_pretrained(model_name_or_path, src_lang=self.src_lang, tgt_lang=self.tgt_lang)
         else:
             self.model = MBartForConditionalGeneration.from_pretrained(pretrained_path)
-            self.tokenizer = MBartForConditionalGeneration.from_pretrained(f"{pretrained_path}tokenizer/")
+            self.tokenizer = MBart50TokenizerFast.from_pretrained(f"{pretrained_path}tokenizer/", src_lang=self.src_lang, tgt_lang=self.tgt_lang)
 
 
     def train(self):

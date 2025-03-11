@@ -52,11 +52,11 @@ TRAIN_PARAMS_PROVA=(
     --lambdas "1|1|1|1|0"
     #--from_pretrained ./ckpts_paradetox/ckpts_paradetox_lambda_primo10/epoch_29/
     --epochs 30
-    --learning_rate 1e-5
+    --learning_rate 3e-5
     --max_sequence_length 64
     --batch_size 16
     --num_workers 1
-    --save_base_folder ./ckpts/
+    --save_base_folder ./ckpts_fr_3e5/
     --save_steps 1
     --eval_strategy epochs
     --eval_steps 1
