@@ -303,12 +303,12 @@ class Evaluator():
                    'ref-METEOR avg':avg_2dir_meteor_ref,
                    }
 
-        if phase == 'test':
-            acc, prec, rec, f1 = self.__compute_classif_metrics__(pred_A, pred_B)
-            metrics['style accuracy'] = acc
-            metrics['style precision'] = prec
-            metrics['style recall'] = rec
-            metrics['style F1 score'] = f1
+        # if phase == 'test':
+        #     acc, prec, rec, f1 = self.__compute_classif_metrics__(pred_A, pred_B)
+        #     metrics['style accuracy'] = acc
+        #     metrics['style precision'] = prec
+        #     metrics['style recall'] = rec
+        #     metrics['style F1 score'] = f1
         
         if phase == 'validation':
             base_path = f"{self.args.save_base_folder}epoch_{epoch}/"

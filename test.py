@@ -94,7 +94,7 @@ if args.n_references is not None:
                                             n_ref=args.n_references,
                                             separator_src='\n',
                                             separator_ref='\n',
-                                            max_dataset_samples=args.max_samples_test)
+                                            max_dataset_samples=args.max_samples_test)[:10]
     
     parallel_ds_testBA = ParallelRefDataset(dataset_format='line_file',
                                             style_src=style_b,
@@ -104,7 +104,7 @@ if args.n_references is not None:
                                             n_ref=args.n_references,
                                             separator_src='\n',
                                             separator_ref='\n',
-                                            max_dataset_samples=args.max_samples_test)
+                                            max_dataset_samples=args.max_samples_test)[:10]
 else:
     mono_ds_a_test = MonostyleDataset(dataset_format="line_file",
                                       style=style_a,

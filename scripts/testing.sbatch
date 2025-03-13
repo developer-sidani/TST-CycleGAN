@@ -45,7 +45,7 @@ for ds in "${test_ds[@]}"; do
         --style_a en
         --style_b de
         --lang en
-        --from_pretrained /home/asidani/TST-CycleGAN/ckpts_de_new/epoch_28/
+        --from_pretrained /home/asidani/TST-CycleGAN/ckpts_3e5/epoch_15/
         --path_paral_A_test=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_$ds.en
         --path_paral_B_test=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_$ds.de
         --path_paral_test_ref=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/de/$ds/
