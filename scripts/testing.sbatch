@@ -37,8 +37,8 @@ PYTHON_PATH="/home/asidani/.conda/envs/cliptrans/bin/python3"
 
 
 
-# test_ds = ("2016_flickr" "2017_flickr" "2018_flickr" "2017_mscoco")
-test_ds=("2016_flickr")
+test_ds=("2016_flickr" "2017_flickr" "2018_flickr" "2017_mscoco")
+# test_ds=("2016_flickr")
 
 for ds in "${test_ds[@]}"; do
     TEST_PARAMS=(
@@ -52,7 +52,6 @@ for ds in "${test_ds[@]}"; do
         --n_references=1
         --generator_model_tag facebook/mbart-large-50
         --discriminator_model_tag distilbert-base-multilingual-cased
-        --max_samples_test 10
         --test_ds $ds
         --max_sequence_length=64 
         --batch_size=16 
