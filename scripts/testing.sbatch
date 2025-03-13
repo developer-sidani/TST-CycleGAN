@@ -37,8 +37,8 @@ PYTHON_PATH="/home/asidani/.conda/envs/cliptrans/bin/python3"
 
 
 
-test_ds = ("2016_flickr" "2017_flickr" "2018_flickr" "2017_mscoco")
-# test_ds=("2016_flickr")
+# test_ds = ("2016_flickr" "2017_flickr" "2018_flickr" "2017_mscoco")
+test_ds=("2016_flickr")
 
 for ds in "${test_ds[@]}"; do
     TEST_PARAMS=(
