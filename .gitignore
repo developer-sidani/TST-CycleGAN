@@ -163,3 +163,5 @@ cython_debug/
 
 # Debug and complete data
 _xtr/
+
+ckpts*/
