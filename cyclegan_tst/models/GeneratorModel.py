@@ -14,8 +14,8 @@ class GeneratorModel(nn.Module):
         max_seq_length: int = 64,
         truncation: str = "longest_first",
         padding: str = "max_length",
-        src_lang: str = "en_XX",
-        tgt_lang: str = "ro_RO"
+        src_lang: str = "en",  # Short language code
+        tgt_lang: str = "de"   # Short language code
         ):
         super(GeneratorModel, self).__init__()
         
@@ -23,6 +23,8 @@ class GeneratorModel(nn.Module):
         self.max_seq_length = max_seq_length
         self.truncation = truncation
         self.padding = padding
+        
+        # Convert short language codes to full mBART language codes
         self.src_lang = get_lang_code(src_lang)
         self.tgt_lang = get_lang_code(tgt_lang)
         
@@ -48,7 +50,7 @@ class GeneratorModel(nn.Module):
         target_sentences: List[str] = None,
         device = None,
         ):
-
+        # Tokenize input sentences
         inputs = self.tokenizer(sentences, 
             truncation=self.truncation, 
             padding=self.padding, 
@@ -56,35 +58,36 @@ class GeneratorModel(nn.Module):
             return_tensors="pt")
 
         if target_sentences is not None:
-            with self.tokenizer.as_target_tokenizer():
-                target = self.tokenizer(target_sentences,
-                    truncation=self.truncation, 
-                    padding=self.padding, 
-                    max_length=self.max_seq_length,
-                    return_tensors="pt")
-
-            labels = target["input_ids"]
+            labels = self.tokenizer(target_sentences,
+                truncation=self.truncation, 
+                padding=self.padding, 
+                max_length=self.max_seq_length,
+                return_tensors="pt").input_ids
+            
             inputs = inputs.to(device)
             labels = labels.to(device)
             output_supervised = self.model(**inputs, labels=labels)
         
         inputs = inputs.to(device)
-        output = self.model.generate(**inputs, forced_bos_token_id = self.tokenizer.lang_code_to_id[self.tgt_lang], max_length=self.max_seq_length)
+        output = self.model.generate(
+            **inputs, 
+            forced_bos_token_id=self.tokenizer.lang_code_to_id[self.tgt_lang],
+            max_length=self.max_seq_length
+        )
 
-        with self.tokenizer.as_target_tokenizer():
-            transferred_sentences = [self.tokenizer.decode(t, skip_special_tokens=True) for t in output]
+        # Decode the output
+        transferred_sentences = self.tokenizer.batch_decode(output, skip_special_tokens=True)
 
         if target_sentences is not None:
             return output, transferred_sentences, output_supervised.loss
         else:
             return output, transferred_sentences
-
+        
     def transfer(
         self,
         sentences: List[str],
         device = None
         ):
-
         inputs = self.tokenizer(sentences, 
             truncation=self.truncation, 
             padding=self.padding, 
@@ -92,9 +95,14 @@ class GeneratorModel(nn.Module):
             return_tensors="pt")
                 
         inputs = inputs.to(device)
-        output = self.model.generate(**inputs, forced_bos_token_id = self.tokenizer.lang_code_to_id[self.tgt_lang], max_length=self.max_seq_length)
-        with self.tokenizer.as_target_tokenizer(): 
-            transferred_sentences = [self.tokenizer.decode(t, skip_special_tokens=True) for t in output]
+        output = self.model.generate(
+            **inputs, 
+            forced_bos_token_id=self.tokenizer.lang_code_to_id[self.tgt_lang],
+            max_length=self.max_seq_length
+        )
+        
+        # Decode
+        transferred_sentences = self.tokenizer.batch_decode(output, skip_special_tokens=True)
 
         return transferred_sentences
     
