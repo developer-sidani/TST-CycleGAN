@@ -1,7 +1,7 @@
 from comet_ml import Experiment, ExistingExperiment
 from dotenv import load_dotenv
 
-from data.datasets import MonostyleDataset, ParallelRefDataset
+from data.datasets import MonostyleDataset, ParallelRefDataset, ImageCaptionDataset, ParallelImageTextDataset
 from cyclegan_tst.models.CycleGANModel import CycleGANModel
 from cyclegan_tst.models.GeneratorModel import GeneratorModel
 from cyclegan_tst.models.DiscriminatorModel import DiscriminatorModel
@@ -99,7 +99,24 @@ parser.add_argument('--comet_workspace', type=str,  dest="comet_workspace", defa
 parser.add_argument('--comet_project_name',  type=str,  dest="comet_project_name",  default=None,  help='Comet experiment name (used only if comet_key is not None)')
 parser.add_argument('--comet_exp',  type=str,  dest="comet_exp",  default=None,  help='Comet experiment key to continue logging (used only if comet_key is not None)')
 
+# Add new arguments for CLIP integration and training phases
+parser.add_argument('--use_clip', action='store_true', default=False, help='Whether to use CLIP for image-to-text generation')
+parser.add_argument('--clip_model_name', type=str, default='openai/clip-vit-base-patch32', help='The tag of the CLIP model')
+parser.add_argument('--prefix_length', type=int, default=10, help='Length of the prefix for CLIP embeddings')
+parser.add_argument('--mapping_network', type=str, default='mlp', 
+                   choices=['mlp', 'hidden_mlp', 'transformer'], help='Type of mapping network for CLIP')
+parser.add_argument('--training_phase', type=str, choices=['caption', 'text_recon', 'translate', 'cycle'], 
+                   default='cycle', help='Training phase')
+parser.add_argument('--image_dir', type=str, default=None, help='Directory containing images (required if using CLIP)')
+parser.add_argument('--caption_file_a', type=str, default=None, help='File containing captions for style A (required if using CLIP)')
+parser.add_argument('--caption_file_b', type=str, default=None, help='File containing captions for style B (required if using CLIP)')
+parser.add_argument('--caption_file_a_eval', type=str, default=None, help='File containing captions for evaluation in style A')
+parser.add_argument('--caption_file_b_eval', type=str, default=None, help='File containing captions for evaluation in style B')
+
 args = parser.parse_args()
+
+if args.use_clip and args.image_dir is None:
+    raise ValueError("--image_dir must be provided when using CLIP")
 
 style_a = args.style_a
 style_b = args.style_b
@@ -123,55 +140,143 @@ for key, value in vars(args).items():
 lambdas = [float(l) for l in args.lambdas.split('|')]
 args.lambdas = lambdas
     
-mono_ds_a = MonostyleDataset(dataset_format="line_file",
-                            style=style_a,
-                            dataset_path=args.path_mono_A,
-                            separator='\n',
-                            max_dataset_samples=args.max_samples_train)
+# Define transforms for images if using CLIP
+if args.use_clip:
+    import torchvision.transforms as transforms
+    preprocess = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
 
-mono_ds_b = MonostyleDataset(dataset_format="line_file",
-                            style=style_b,
-                            dataset_path=args.path_mono_B,
-                            separator='\n',
-                            max_dataset_samples=args.max_samples_train)
-
-if args.nonparal_same_size:
-    mono_ds_a_len, mono_ds_b_len = len(mono_ds_a), len(mono_ds_b)
-    if mono_ds_a_len > mono_ds_b_len: mono_ds_a.reduce_data(mono_ds_b_len)
-    else: mono_ds_b.reduce_data(mono_ds_a_len)
-
-if args.n_references is not None:
-    parallel_ds_evalAB = ParallelRefDataset(dataset_format='line_file',
-                                            style_src=style_a,
-                                            style_ref=style_b,
-                                            dataset_path_src=args.path_paral_A_eval,
-                                            dataset_path_ref=args.path_paral_eval_ref,
-                                            n_ref=args.n_references,
-                                            separator_src='\n',
-                                            separator_ref='\n',
-                                            max_dataset_samples=args.max_samples_eval)
+# Load datasets based on training phase
+if args.training_phase == 'caption' and args.use_clip:
+    # Image captioning phase - load image-caption datasets
+    train_ds_a = ImageCaptionDataset(
+        image_dir=args.image_dir,
+        caption_file=args.caption_file_a,
+        transform=preprocess,
+        max_dataset_samples=args.max_samples_train,
+        lang=args.lang
+    )
     
-    parallel_ds_evalBA = ParallelRefDataset(dataset_format='line_file',
-                                            style_src=style_b,
-                                            style_ref=style_a,
-                                            dataset_path_src=args.path_paral_B_eval,
-                                            dataset_path_ref=args.path_paral_eval_ref,
-                                            n_ref=args.n_references,
-                                            separator_src='\n',
-                                            separator_ref='\n',
-                                            max_dataset_samples=args.max_samples_eval)
+    train_ds_b = ImageCaptionDataset(
+        image_dir=args.image_dir,
+        caption_file=args.caption_file_b,
+        transform=preprocess,
+        max_dataset_samples=args.max_samples_train,
+        lang=args.lang
+    )
+    
+    if args.caption_file_a_eval is not None and args.caption_file_b_eval is not None:
+        eval_ds_a = ImageCaptionDataset(
+            image_dir=args.image_dir,
+            caption_file=args.caption_file_a_eval,
+            transform=preprocess,
+            max_dataset_samples=args.max_samples_eval,
+            lang=args.lang
+        )
+        
+        eval_ds_b = ImageCaptionDataset(
+            image_dir=args.image_dir,
+            caption_file=args.caption_file_b_eval,
+            transform=preprocess,
+            max_dataset_samples=args.max_samples_eval,
+            lang=args.lang
+        )
+elif args.training_phase == 'translate' and args.use_clip:
+    # Image-text parallel translation phase
+    train_ds_a = ParallelImageTextDataset(
+        image_dir=args.image_dir,
+        caption_file_src=args.caption_file_a,
+        caption_file_tgt=args.caption_file_b,
+        transform=preprocess,
+        max_dataset_samples=args.max_samples_train,
+        src_lang=args.style_a,
+        tgt_lang=args.style_b
+    )
+    
+    train_ds_b = ParallelImageTextDataset(
+        image_dir=args.image_dir,
+        caption_file_src=args.caption_file_b,
+        caption_file_tgt=args.caption_file_a,
+        transform=preprocess, 
+        max_dataset_samples=args.max_samples_train,
+        src_lang=args.style_b,
+        tgt_lang=args.style_a
+    )
+    
+    if args.caption_file_a_eval is not None and args.caption_file_b_eval is not None:
+        eval_ds_a = ParallelImageTextDataset(
+            image_dir=args.image_dir,
+            caption_file_src=args.caption_file_a_eval,
+            caption_file_tgt=args.caption_file_b_eval,
+            transform=preprocess,
+            max_dataset_samples=args.max_samples_eval,
+            src_lang=args.style_a,
+            tgt_lang=args.style_b
+        )
+        
+        eval_ds_b = ParallelImageTextDataset(
+            image_dir=args.image_dir,
+            caption_file_src=args.caption_file_b_eval,
+            caption_file_tgt=args.caption_file_a_eval,
+            transform=preprocess,
+            max_dataset_samples=args.max_samples_eval,
+            src_lang=args.style_b,
+            tgt_lang=args.style_a
+        )
 else:
-    mono_ds_a_eval = MonostyleDataset(dataset_format="line_file",
-                                      style=style_a,
-                                      dataset_path=args.path_mono_A_eval,
-                                      separator='\n',
-                                      max_dataset_samples=args.max_samples_eval)
+    # Standard text-based datasets for CycleGAN
+    mono_ds_a = MonostyleDataset(dataset_format="line_file",
+                                style=style_a,
+                                dataset_path=args.path_mono_A,
+                                separator='\n',
+                                max_dataset_samples=args.max_samples_train)
 
-    mono_ds_b_eval = MonostyleDataset(dataset_format="line_file",
-                                      style=style_b,
-                                      dataset_path=args.path_mono_B_eval,
-                                      separator='\n',
-                                      max_dataset_samples=args.max_samples_eval)
+    mono_ds_b = MonostyleDataset(dataset_format="line_file",
+                                style=style_b,
+                                dataset_path=args.path_mono_B,
+                                separator='\n',
+                                max_dataset_samples=args.max_samples_train)
+
+    if args.nonparal_same_size:
+        mono_ds_a_len, mono_ds_b_len = len(mono_ds_a), len(mono_ds_b)
+        if mono_ds_a_len > mono_ds_b_len: mono_ds_a.reduce_data(mono_ds_b_len)
+        else: mono_ds_b.reduce_data(mono_ds_a_len)
+
+    if args.n_references is not None:
+        parallel_ds_evalAB = ParallelRefDataset(dataset_format='line_file',
+                                                style_src=style_a,
+                                                style_ref=style_b,
+                                                dataset_path_src=args.path_paral_A_eval,
+                                                dataset_path_ref=args.path_paral_eval_ref,
+                                                n_ref=args.n_references,
+                                                separator_src='\n',
+                                                separator_ref='\n',
+                                                max_dataset_samples=args.max_samples_eval)
+        
+        parallel_ds_evalBA = ParallelRefDataset(dataset_format='line_file',
+                                                style_src=style_b,
+                                                style_ref=style_a,
+                                                dataset_path_src=args.path_paral_B_eval,
+                                                dataset_path_ref=args.path_paral_eval_ref,
+                                                n_ref=args.n_references,
+                                                separator_src='\n',
+                                                separator_ref='\n',
+                                                max_dataset_samples=args.max_samples_eval)
+    else:
+        mono_ds_a_eval = MonostyleDataset(dataset_format="line_file",
+                                          style=style_a,
+                                          dataset_path=args.path_mono_A_eval,
+                                          separator='\n',
+                                          max_dataset_samples=args.max_samples_eval)
+
+        mono_ds_b_eval = MonostyleDataset(dataset_format="line_file",
+                                          style=style_b,
+                                          dataset_path=args.path_mono_B_eval,
+                                          separator='\n',
+                                          max_dataset_samples=args.max_samples_eval)
 
 print (f"Mono A  : {len(mono_ds_a)}")
 print (f"Mono B  : {len(mono_ds_b)}")
@@ -241,12 +346,52 @@ else:
 '''
 
 if args.from_pretrained is not None:
-    G_ab = GeneratorModel(args.generator_model_tag, f'{args.from_pretrained}G_ab/', max_seq_length=args.max_sequence_length, src_lang=args.style_a, tgt_lang=args.style_b)
-    G_ba = GeneratorModel(args.generator_model_tag, f'{args.from_pretrained}G_ba/', max_seq_length=args.max_sequence_length, src_lang=args.style_b, tgt_lang=args.style_a)
+    G_ab = GeneratorModel(
+        args.generator_model_tag, 
+        f'{args.from_pretrained}G_ab/', 
+        max_seq_length=args.max_sequence_length, 
+        src_lang=args.style_a, 
+        tgt_lang=args.style_b,
+        use_clip=args.use_clip,
+        clip_model_name=args.clip_model_name if args.use_clip else None,
+        prefix_length=args.prefix_length if args.use_clip else 0,
+        mapping_network=args.mapping_network if args.use_clip else 'mlp'
+    )
+    
+    G_ba = GeneratorModel(
+        args.generator_model_tag, 
+        f'{args.from_pretrained}G_ba/', 
+        max_seq_length=args.max_sequence_length, 
+        src_lang=args.style_b, 
+        tgt_lang=args.style_a,
+        use_clip=args.use_clip,
+        clip_model_name=args.clip_model_name if args.use_clip else None,
+        prefix_length=args.prefix_length if args.use_clip else 0,
+        mapping_network=args.mapping_network if args.use_clip else 'mlp'
+    )
     print('Generator pretrained models loaded correctly')
 else:
-    G_ab = GeneratorModel(args.generator_model_tag, max_seq_length=args.max_sequence_length, src_lang=args.style_a, tgt_lang=args.style_b)
-    G_ba = GeneratorModel(args.generator_model_tag, max_seq_length=args.max_sequence_length, src_lang=args.style_b, tgt_lang=args.style_a)
+    G_ab = GeneratorModel(
+        args.generator_model_tag, 
+        max_seq_length=args.max_sequence_length, 
+        src_lang=args.style_a, 
+        tgt_lang=args.style_b,
+        use_clip=args.use_clip,
+        clip_model_name=args.clip_model_name if args.use_clip else None,
+        prefix_length=args.prefix_length if args.use_clip else 0,
+        mapping_network=args.mapping_network if args.use_clip else 'mlp'
+    )
+    
+    G_ba = GeneratorModel(
+        args.generator_model_tag, 
+        max_seq_length=args.max_sequence_length, 
+        src_lang=args.style_b, 
+        tgt_lang=args.style_a,
+        use_clip=args.use_clip,
+        clip_model_name=args.clip_model_name if args.use_clip else None,
+        prefix_length=args.prefix_length if args.use_clip else 0,
+        mapping_network=args.mapping_network if args.use_clip else 'mlp'
+    )
     print('Generator pretrained models not loaded - Initial weights will be used')
 
 
@@ -290,7 +435,7 @@ if args.use_cuda_if_available:
 else:
     device = torch.device("cpu")
 
-cycleGAN = CycleGANModel(G_ab, G_ba, D_ab, D_ba, Cls, device=device)
+cycleGAN = CycleGANModel(G_ab=G_ab, G_ba=G_ba, D_ab=D_ab, D_ba=D_ba, Cls=Cls, device=device, use_clip=args.use_clip)
 
 n_batch_epoch = min(len(mono_dl_a), len(mono_dl_b))
 num_training_steps = args.epochs * n_batch_epoch
@@ -359,18 +504,82 @@ for epoch in range(start_epoch, args.epochs):
     print (f"\nTraining epoch: {epoch}")
     cycleGAN.train() # set training mode
 
-    for unsupervised_a, unsupervised_b in zip(mono_dl_a, mono_dl_b):
-        len_a, len_b = len(unsupervised_a), len(unsupervised_b)
-        if len_a > len_b: unsupervised_a = unsupervised_a[:len_b]
-        else: unsupervised_b = unsupervised_b[:len_a]
-
-        cycleGAN.training_cycle(sentences_a=unsupervised_a,
-                                sentences_b=unsupervised_b,
-                                lambdas=lambdas,
-                                comet_experiment=experiment,
-                                loss_logging=loss_logging,
-                                training_step=current_training_step)
-
+    for batch_idx, (batch_a, batch_b) in enumerate(zip(mono_dl_a, mono_dl_b)):
+        
+        # Process batches based on training phase and dataset type
+        if args.training_phase == 'caption' and args.use_clip:
+            # Unpack image-caption pairs
+            images_a, captions_a = batch_a
+            images_b, captions_b = batch_b
+            
+            # Training for caption phase focuses on individual image-to-text generation
+            _, _, a_loss = G_ab.forward_with_clip(images_a, captions_a, device=device)
+            _, _, b_loss = G_ba.forward_with_clip(images_b, captions_b, device=device)
+            
+            # Backward pass for each loss independently
+            optimizer.zero_grad()
+            a_loss.backward()
+            b_loss.backward()
+            optimizer.step()
+            
+            # Log losses
+            if experiment is not None:
+                with experiment.train():
+                    experiment.log_metric('caption_loss_a_to_b', a_loss.item(), step=current_training_step)
+                    experiment.log_metric('caption_loss_b_to_a', b_loss.item(), step=current_training_step)
+            
+        elif args.training_phase == 'translate' and args.use_clip:
+            # Unpack image-text translation pairs
+            images_a, src_captions_a, tgt_captions_a = batch_a
+            images_b, src_captions_b, tgt_captions_b = batch_b
+            
+            # Training for translation phase focuses on supervised translation
+            _, _, a_loss = G_ab.forward_with_clip(images_a, tgt_captions_a, device=device)
+            _, _, b_loss = G_ba.forward_with_clip(images_b, tgt_captions_b, device=device)
+            
+            # Backward pass
+            optimizer.zero_grad()
+            a_loss.backward()
+            b_loss.backward()
+            optimizer.step()
+            
+            # Log losses
+            if experiment is not None:
+                with experiment.train():
+                    experiment.log_metric('translate_loss_a_to_b', a_loss.item(), step=current_training_step)
+                    experiment.log_metric('translate_loss_b_to_a', b_loss.item(), step=current_training_step)
+            
+        else:
+            # For text-based training phases (text_recon or cycle)
+            if args.training_phase == 'cycle':
+                # Standard CycleGAN training
+                cycleGAN.training_cycle(
+                    sentences_a=batch_a,
+                    sentences_b=batch_b,
+                    lambdas=lambdas,
+                    comet_experiment=experiment,
+                    loss_logging=loss_logging,
+                    training_step=current_training_step
+                )
+            elif args.training_phase == 'text_recon':
+                # Text reconstruction focuses on autoencoding
+                _, _, a_loss = G_ab(sentences=batch_a, target_sentences=batch_a, device=device)
+                _, _, b_loss = G_ba(sentences=batch_b, target_sentences=batch_b, device=device)
+                
+                # Backward pass
+                optimizer.zero_grad()
+                a_loss.backward()
+                b_loss.backward()
+                optimizer.step()
+                
+                # Log losses
+                if experiment is not None:
+                    with experiment.train():
+                        experiment.log_metric('recon_loss_a', a_loss.item(), step=current_training_step)
+                        experiment.log_metric('recon_loss_b', b_loss.item(), step=current_training_step)
+            
+        # ... keep existing code for scheduler stepping, etc ...
+        
         optimizer.step()
         lr_scheduler.step()
         optimizer.zero_grad()

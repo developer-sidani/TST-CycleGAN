@@ -2,6 +2,9 @@ import csv
 from typing import List
 import logging
 import random
+import os
+from PIL import Image
+import torch
 
 import pandas as pd
 import numpy as np
@@ -226,3 +229,222 @@ class ParallelRefDataset(Dataset):
             ref_list.append(t[1])
         src_list = tuple(src_list)
         return [src_list, ref_list]
+
+class ImageCaptionDataset(Dataset):
+    """
+    Dataset for loading image-caption pairs for pretraining.
+    """
+    def __init__(
+        self, 
+        image_dir: str, 
+        caption_file: str, 
+        transform=None, 
+        max_dataset_samples: int = None,
+        lang: str = "en"
+    ):
+        """
+        Args:
+            image_dir (str): Directory with all the images.
+            caption_file (str): Path to the caption file.
+            transform (callable, optional): Optional transform to be applied on an image.
+            max_dataset_samples (int, optional): Maximum number of samples to use.
+            lang (str, optional): Language of captions.
+        """
+        super(ImageCaptionDataset, self).__init__()
+        
+        self.image_dir = image_dir
+        self.transform = transform
+        self.lang = lang
+        
+        # Load captions
+        self.data = []
+        
+        if caption_file.endswith('.tsv'):
+            # Tab-separated format (image_path \t caption)
+            with open(caption_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if '\t' in line:
+                        img_path, caption = line.strip().split('\t', 1)
+                        self.data.append((img_path, caption))
+        elif caption_file.endswith('.txt'):
+            # Text file format (one caption per line, first token is image filename)
+            with open(caption_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    parts = line.strip().split(' ', 1)
+                    if len(parts) == 2:
+                        img_path, caption = parts
+                        self.data.append((img_path, caption))
+        else:
+            # CSV format
+            df = pd.read_csv(caption_file)
+            if 'image' in df.columns and 'caption' in df.columns:
+                for _, row in df.iterrows():
+                    self.data.append((row['image'], row['caption']))
+            else:
+                raise ValueError(f"CSV file must have 'image' and 'caption' columns")
+        
+        # Apply max samples limit
+        if max_dataset_samples is not None and max_dataset_samples < len(self.data):
+            random.seed(42)  # For reproducibility
+            ix = random.sample(range(0, len(self.data)), max_dataset_samples)
+            self.data = [self.data[i] for i in ix]
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        img_path, caption = self.data[idx]
+        
+        # Load image
+        img_path = os.path.join(self.image_dir, img_path)
+        try:
+            image = Image.open(img_path).convert('RGB')
+        except Exception as e:
+            logging.error(f"Error loading image {img_path}: {e}")
+            # Return a placeholder image if the image cannot be loaded
+            image = Image.new('RGB', (224, 224), color='black')
+        
+        if self.transform:
+            image = self.transform(image)
+        
+        return image, caption
+    
+    @staticmethod
+    def collate_fn(batch):
+        """Custom collate function for handling image-caption pairs."""
+        images = [item[0] for item in batch]
+        captions = [item[1] for item in batch]
+        return images, captions
+
+
+class ParallelImageTextDataset(Dataset):
+    """
+    Dataset for parallel image-text pairs, where each image has corresponding text in two languages.
+    Used for training the image-to-text generation in multiple languages.
+    """
+    def __init__(
+        self,
+        image_dir: str,
+        caption_file_src: str,
+        caption_file_tgt: str = None,
+        transform=None,
+        max_dataset_samples: int = None,
+        src_lang: str = "en",
+        tgt_lang: str = "de"
+    ):
+        """
+        Args:
+            image_dir (str): Directory with images
+            caption_file_src (str): File with source language captions
+            caption_file_tgt (str, optional): File with target language captions. If None, 
+                                             assumes caption_file_src has both languages
+            transform (callable, optional): Transform to apply to images
+            max_dataset_samples (int, optional): Maximum number of samples to use
+            src_lang (str): Source language code
+            tgt_lang (str): Target language code
+        """
+        super(ParallelImageTextDataset, self).__init__()
+        
+        self.image_dir = image_dir
+        self.transform = transform
+        self.src_lang = src_lang
+        self.tgt_lang = tgt_lang
+        
+        # Load source captions
+        self.data = []
+        
+        if caption_file_tgt is None:
+            # Assume single file with both source and target captions
+            if caption_file_src.endswith('.tsv'):
+                # Format: image_path \t source_caption \t target_caption
+                with open(caption_file_src, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        parts = line.strip().split('\t')
+                        if len(parts) >= 3:
+                            img_path, src_caption, tgt_caption = parts[0], parts[1], parts[2]
+                            self.data.append((img_path, src_caption, tgt_caption))
+            elif caption_file_src.endswith('.csv'):
+                df = pd.read_csv(caption_file_src)
+                if 'image' in df.columns and src_lang in df.columns and tgt_lang in df.columns:
+                    for _, row in df.iterrows():
+                        self.data.append((row['image'], row[src_lang], row[tgt_lang]))
+                else:
+                    raise ValueError(f"CSV file must have 'image', '{src_lang}', and '{tgt_lang}' columns")
+        else:
+            # Separate files for source and target captions
+            src_captions = []
+            tgt_captions = []
+            img_paths = []
+            
+            # Load source captions
+            if caption_file_src.endswith('.tsv'):
+                with open(caption_file_src, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if '\t' in line:
+                            img_path, caption = line.strip().split('\t', 1)
+                            img_paths.append(img_path)
+                            src_captions.append(caption)
+            elif caption_file_src.endswith('.txt'):
+                with open(caption_file_src, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        parts = line.strip().split(' ', 1)
+                        if len(parts) == 2:
+                            img_path, caption = parts
+                            img_paths.append(img_path)
+                            src_captions.append(caption)
+            
+            # Load target captions (assuming same order and image paths)
+            if caption_file_tgt.endswith('.tsv'):
+                with open(caption_file_tgt, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if '\t' in line:
+                            _, caption = line.strip().split('\t', 1)
+                            tgt_captions.append(caption)
+            elif caption_file_tgt.endswith('.txt'):
+                with open(caption_file_tgt, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        parts = line.strip().split(' ', 1)
+                        if len(parts) == 2:
+                            _, caption = parts
+                            tgt_captions.append(caption)
+            
+            # Ensure all lists have the same length
+            assert len(img_paths) == len(src_captions) == len(tgt_captions), \
+                "Mismatch in number of images and captions"
+            
+            # Combine data
+            self.data = list(zip(img_paths, src_captions, tgt_captions))
+        
+        # Apply max samples limit
+        if max_dataset_samples is not None and max_dataset_samples < len(self.data):
+            random.seed(42)  # For reproducibility
+            ix = random.sample(range(0, len(self.data)), max_dataset_samples)
+            self.data = [self.data[i] for i in ix]
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        img_path, src_caption, tgt_caption = self.data[idx]
+        
+        # Load image
+        img_path = os.path.join(self.image_dir, img_path)
+        try:
+            image = Image.open(img_path).convert('RGB')
+        except Exception as e:
+            logging.error(f"Error loading image {img_path}: {e}")
+            # Return a placeholder image if the image cannot be loaded
+            image = Image.new('RGB', (224, 224), color='black')
+        
+        if self.transform:
+            image = self.transform(image)
+        
+        return image, src_caption, tgt_caption
+    
+    @staticmethod
+    def collate_fn(batch):
+        """Custom collate function for handling image-text pairs."""
+        images = [item[0] for item in batch]
+        src_captions = [item[1] for item in batch]
+        tgt_captions = [item[2] for item in batch]
+        return images, src_captions, tgt_captions

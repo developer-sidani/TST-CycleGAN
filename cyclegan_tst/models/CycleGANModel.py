@@ -19,6 +19,7 @@ class CycleGANModel(nn.Module):
         D_ba : Union[DiscriminatorModel, None],
         Cls : Union[ClassifierModel, None],
         device = None,
+        use_clip: bool = False
     ):
         """Initialization method for the CycleGANModel
 
@@ -28,6 +29,8 @@ class CycleGANModel(nn.Module):
             D_b (:obj:cyclegan_tst.models.DiscriminatorModel): Discriminator model for B
             D_a (:obj:cyclegan_tst.models.DiscriminatorModel): Discriminator model for A
             Cls (:obj:cyclegan_tst.models.ClassifierModel): Style classifier
+            device: Device to use for computation
+            use_clip: Whether to use CLIP embeddings
         """
         super(CycleGANModel, self).__init__()
         
@@ -39,6 +42,7 @@ class CycleGANModel(nn.Module):
         self.D_ab = D_ab
         self.D_ba = D_ba
         self.Cls = Cls
+        self.use_clip = use_clip
 
         self.device = device
         logging.info(f"Device: {device}")
@@ -50,6 +54,13 @@ class CycleGANModel(nn.Module):
         self.D_ba.model.to(self.device)
         if self.Cls is not None:
             self.Cls.model.to(self.device)
+        
+        # Move adapters to device if using CLIP
+        if self.use_clip:
+            if hasattr(self.G_ab, 'adapter'):
+                self.G_ab.adapter.to(self.device)
+            if hasattr(self.G_ba, 'adapter'):
+                self.G_ba.adapter.to(self.device)
 
     def train(self):
         self.G_ab.train()
@@ -66,16 +77,31 @@ class CycleGANModel(nn.Module):
     def get_optimizer_parameters(
         self
     ):
-        optimization_parameters =  list(self.G_ab.model.parameters())
+        optimization_parameters = []
+        
+        # Generator parameters
+        optimization_parameters += list(self.G_ab.model.parameters())
         optimization_parameters += list(self.G_ba.model.parameters())
+        
+        # Add adapter parameters if using CLIP
+        if self.use_clip:
+            if hasattr(self.G_ab, 'adapter'):
+                optimization_parameters += list(self.G_ab.adapter.parameters())
+            if hasattr(self.G_ba, 'adapter'):
+                optimization_parameters += list(self.G_ba.adapter.parameters())
+        
+        # Discriminator parameters
         optimization_parameters += list(self.D_ab.model.parameters())
         optimization_parameters += list(self.D_ba.model.parameters())
+        
         return optimization_parameters
 
     def training_cycle(
         self, 
-        sentences_a: List[str],
-        sentences_b: List[str],
+        sentences_a: List[str] = None,
+        sentences_b: List[str] = None,
+        images_a: List = None,
+        images_b: List = None,
         target_sentences_ab: List[str] = None,
         target_sentences_ba: List[str] = None,
         lambdas: List[float] = None,
@@ -83,17 +109,35 @@ class CycleGANModel(nn.Module):
         loss_logging = None,
         training_step: int = None
     ):
-    
+        """
+        Training cycle for CycleGAN that can handle either text or image inputs
+        
+        Args:
+            sentences_a: List of sentences from domain A
+            sentences_b: List of sentences from domain B
+            images_a: List of images from domain A
+            images_b: List of images from domain B
+            target_sentences_ab: Target sentences for A->B
+            target_sentences_ba: Target sentences for B->A
+            lambdas: Loss weights
+            comet_experiment: Comet experiment for logging
+            loss_logging: Dictionary for loss logging
+            training_step: Current training step
+        """
+        
         # ---------- BEGIN : cycle A -> B ----------
 
-        # first half
-        out_transferred_ab, transferred_ab = self.G_ab(sentences_a, device=self.device) 
+        # first half - select text or image input based on what's provided
+        if self.use_clip and images_a is not None:
+            out_transferred_ab, transferred_ab = self.G_ab(images=images_a, device=self.device)
+        else:
+            out_transferred_ab, transferred_ab = self.G_ab(sentences=sentences_a, device=self.device)
         
         # D_ab fake
-        self.D_ab.eval() # this loss is only for the Generator
+        self.D_ab.eval()  # this loss is only for the Generator
         zeros = torch.zeros(len(transferred_ab))
-        ones  = torch.ones(len(transferred_ab))
-        labels_fake_sentences = torch.column_stack((ones, zeros)) # one to the class index 0
+        ones = torch.ones(len(transferred_ab))
+        labels_fake_sentences = torch.column_stack((ones, zeros))  # one to the class index 0
         # print ("Discriminator labels:", labels_fake_sentences)
         _, loss_g_ab = self.D_ab(transferred_ab, labels_fake_sentences, device=self.device)
         if lambdas[4] != 0:
@@ -101,9 +145,10 @@ class CycleGANModel(nn.Module):
             labels_style_b_sentences = torch.ones(len(transferred_ab), dtype=int)
             _, loss_g_ab_cls = self.Cls(transferred_ab, labels_style_b_sentences, device=self.device)
         
-        
-        # second half
-        out_reconstructed_ba, reconstructed_ba, cycle_loss_aba = self.G_ba(transferred_ab, sentences_a, device=self.device)
+        # second half - use generated text for the cycle consistency 
+        out_reconstructed_ba, reconstructed_ba, cycle_loss_aba = self.G_ba(sentences=transferred_ab, 
+                                                                          target_sentences=sentences_a, 
+                                                                          device=self.device)
 
         complete_loss_g_ab = lambdas[0]*cycle_loss_aba + lambdas[1]*loss_g_ab
         if comet_experiment is not None:
@@ -125,13 +170,14 @@ class CycleGANModel(nn.Module):
         # D_ab fake
         self.D_ab.train()
         zeros = torch.zeros(len(transferred_ab))
-        ones  = torch.ones(len(transferred_ab))
-        labels_fake_sentences = torch.column_stack((zeros, ones)) # one to the class index 1
+        ones = torch.ones(len(transferred_ab))
+        labels_fake_sentences = torch.column_stack((zeros, ones))  # one to the class index 1
         _, loss_d_ab_fake = self.D_ab(transferred_ab, labels_fake_sentences, device=self.device) 
+        
         # D_ab real
         zeros = torch.zeros(len(transferred_ab))
-        ones  = torch.ones(len(transferred_ab))
-        labels_real_sentences = torch.column_stack((ones, zeros)) # one to the class index 0
+        ones = torch.ones(len(transferred_ab))
+        labels_real_sentences = torch.column_stack((ones, zeros))  # one to the class index 0
         _, loss_d_ab_real = self.D_ab(sentences_b, labels_real_sentences, device=self.device) 
         complete_loss_d_ab = lambdas[2]*loss_d_ab_fake + lambdas[3]*loss_d_ab_real
 
@@ -144,25 +190,29 @@ class CycleGANModel(nn.Module):
         complete_loss_d_ab.backward()
         
         # ----------  END : cycle A -> B  ----------
-
         
         # ---------- BEGIN : cycle B -> A ----------
-        # first half
-        out_transferred_ba, transferred_ba = self.G_ba(sentences_b, device=self.device)
+        # first half - select text or image input based on what's provided
+        if self.use_clip and images_b is not None:
+            out_transferred_ba, transferred_ba = self.G_ba(images=images_b, device=self.device)
+        else:
+            out_transferred_ba, transferred_ba = self.G_ba(sentences=sentences_b, device=self.device)
 
         # D_ba
-        self.D_ba.eval() # this loss is only for the Generator
+        self.D_ba.eval()  # this loss is only for the Generator
         zeros = torch.zeros(len(transferred_ba))
-        ones  = torch.ones(len(transferred_ba))
-        labels_fake_sentences = torch.column_stack((ones, zeros)) # one to the class index 0
+        ones = torch.ones(len(transferred_ba))
+        labels_fake_sentences = torch.column_stack((ones, zeros))  # one to the class index 0
         _, loss_g_ba = self.D_ba(transferred_ba, labels_fake_sentences, device=self.device)
         if lambdas[4] != 0:
             # labels_style_a_sentences = torch.column_stack((ones, zeros))
             labels_style_a_sentences = torch.zeros(len(transferred_ba), dtype=int)
             _, loss_g_ba_cls = self.Cls(transferred_ba, labels_style_a_sentences, device=self.device)
         
-        # second half
-        out_reconstructed_ab, reconstructed_ab, cycle_loss_bab = self.G_ab(transferred_ba, sentences_b, device=self.device)
+        # second half - use generated text for the cycle consistency
+        out_reconstructed_ab, reconstructed_ab, cycle_loss_bab = self.G_ab(sentences=transferred_ba, 
+                                                                          target_sentences=sentences_b, 
+                                                                          device=self.device)
         
         complete_loss_g_ba = lambdas[0]*cycle_loss_bab + lambdas[1]*loss_g_ba
         if comet_experiment is not None:
@@ -184,14 +234,14 @@ class CycleGANModel(nn.Module):
         # D_ba fake
         self.D_ba.train()
         zeros = torch.zeros(len(transferred_ba))
-        ones  = torch.ones(len(transferred_ba))
-        labels_fake_sentences = torch.column_stack((zeros, ones)) # one to the class index 1
+        ones = torch.ones(len(transferred_ba))
+        labels_fake_sentences = torch.column_stack((zeros, ones))  # one to the class index 1
         _, loss_d_ba_fake = self.D_ba(transferred_ba, labels_fake_sentences, device=self.device) 
 
         # D_ba real
         zeros = torch.zeros(len(transferred_ba))
-        ones  = torch.ones(len(transferred_ba))
-        labels_real_sentences = torch.column_stack((ones, zeros)) # one to the class index 0
+        ones = torch.ones(len(transferred_ba))
+        labels_real_sentences = torch.column_stack((ones, zeros))  # one to the class index 0
         _, loss_d_ba_real = self.D_ba(sentences_a, labels_real_sentences, device=self.device) 
         complete_loss_d_ba = lambdas[2]*loss_d_ba_fake + lambdas[3]*loss_d_ba_real
 
@@ -204,21 +254,42 @@ class CycleGANModel(nn.Module):
         complete_loss_d_ba.backward()
         # ---------- END : cycle B -> A ----------
 
-
     def save_models(
         self,
         base_path: Union[str]
     ):
+        """Save all models in the CycleGAN"""
         self.G_ab.save_model(base_path + "/G_ab/")
         self.G_ba.save_model(base_path + "/G_ba/")
         self.D_ab.save_model(base_path + "/D_ab/")
         self.D_ba.save_model(base_path + "/D_ba/")
 
-    def transfer(self,
-                  sentences: List[str],
-                  direction: str):
+    def transfer(
+        self,
+        sentences: List[str] = None,
+        images = None,
+        direction: str = "AB"
+    ):
+        """
+        Transfer content from one domain to another
+        
+        Args:
+            sentences: Input sentences (if text-based)
+            images: Input images (if using CLIP)
+            direction: Direction of transfer ("AB" or "BA")
+            
+        Returns:
+            List of generated sentences
+        """
         if direction == "AB":
-            transferred_sentences = self.G_ab.transfer(sentences, device=self.device)
+            if self.use_clip and images is not None:
+                transferred_sentences = self.G_ab.transfer(images=images, device=self.device)
+            else:
+                transferred_sentences = self.G_ab.transfer(sentences=sentences, device=self.device)
         else:
-            transferred_sentences = self.G_ba.transfer(sentences, device=self.device)
+            if self.use_clip and images is not None:
+                transferred_sentences = self.G_ba.transfer(images=images, device=self.device)
+            else:
+                transferred_sentences = self.G_ba.transfer(sentences=sentences, device=self.device)
+                
         return transferred_sentences
