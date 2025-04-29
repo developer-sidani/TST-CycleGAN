@@ -37,31 +37,40 @@ PYTHON_PATH="/home/asidani/.conda/envs/cliptrans/bin/python3"
 
 
 
+# Get all checkpoint directories
+CKPT_BASE_DIR="/home/asidani/TST-CycleGAN/ckpts_de_1e5/"
+CKPT_DIRS=($(find ${CKPT_BASE_DIR} -maxdepth 1 -type d -name "epoch_*" -printf "%f\n"))
+
 test_ds=("2016_flickr" "2017_flickr" "2018_flickr" "2017_mscoco")
 # test_ds=("2016_flickr")
 
-for ds in "${test_ds[@]}"; do
-    TEST_PARAMS=(
-        --style_a en
-        --style_b de
-        --lang en
-        --from_pretrained /home/asidani/TST-CycleGAN/ckpts_3e5/epoch_15/
-        --path_paral_A_test=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_$ds.en
-        --path_paral_B_test=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_$ds.de
-        --path_paral_test_ref=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/de/$ds/
-        --n_references=1
-        --generator_model_tag facebook/mbart-large-50
-        --discriminator_model_tag distilbert-base-multilingual-cased
-        --test_ds $ds
-        --max_sequence_length=64 
-        --batch_size=16 
-        --pin_memory 
-        --use_cuda_if_available 
-        --comet_logging
-        --num_workers 1
-    )
-    send_discord "[${SLURM_JOB_ID}]: Testing $ds"
-    $PYTHON_PATH test.py "${TEST_PARAMS[@]}"
+for ckpt_dir in "${CKPT_DIRS[@]}"; do
+    send_discord "[${SLURM_JOB_ID}]: Testing with checkpoint ${ckpt_dir}"
+    
+    for ds in "${test_ds[@]}"; do
+        TEST_PARAMS=(
+            --style_a en
+            --style_b de
+            --lang en
+            --from_pretrained ${CKPT_BASE_DIR}${ckpt_dir}/
+            --path_paral_A_test=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_$ds.en
+            --path_paral_B_test=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_$ds.de
+            --path_paral_test_ref=/home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/de/$ds/
+            --n_references=1
+            --generator_model_tag facebook/mbart-large-50
+            --discriminator_model_tag distilbert-base-multilingual-cased
+            --test_ds $ds
+            --ckpt_dir $ckpt_dir
+            --max_sequence_length=64 
+            --batch_size=16 
+            --pin_memory 
+            --use_cuda_if_available 
+            --comet_logging
+            --num_workers 1
+        )
+        send_discord "[${SLURM_JOB_ID}]: Testing $ds with checkpoint ${ckpt_dir}"
+        $PYTHON_PATH test.py "${TEST_PARAMS[@]}"
+    done
 done
 
 
