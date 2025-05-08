@@ -149,19 +149,30 @@ class GeneratorModel(nn.Module):
         device = None,
         ):
         """Forward pass using CLIP embeddings as input."""
+        # Debug: Print image information
+        print(f"DEBUG: Processing {len(images)} images")
+        if isinstance(images[0], torch.Tensor):
+            print(f"DEBUG: Image tensor shape: {images[0].shape}")
+        
         # Get CLIP embeddings
         clip_embeddings = self.get_clip_embeddings(images, device)
+        print(f"DEBUG: CLIP embeddings shape: {clip_embeddings.shape}")
         
         # Process through adapter
         prefix_embeds = self.adapter(clip_embeddings)
+        print(f"DEBUG: Prefix embeddings shape: {prefix_embeds.shape}")
         
         if target_sentences is not None:
+            print(f"DEBUG: Target sentences: {target_sentences[0][:50]}...")
+            
             # Get tokenized target sentences
             labels = self.tokenizer(target_sentences,
                 truncation=self.truncation, 
                 padding=self.padding, 
                 max_length=self.max_seq_length,
                 return_tensors="pt").input_ids.to(device)
+            
+            print(f"DEBUG: Target labels shape: {labels.shape}")
             
             # From the labels, create decoder_input_ids
             from transformers.models.mbart.modeling_mbart import shift_tokens_right
@@ -197,6 +208,8 @@ class GeneratorModel(nn.Module):
                 labels=modified_labels
             )
             
+            print(f"DEBUG: Loss from model: {outputs.loss}")
+            
             # Generate text for return
             generated_ids = self.model.generate(
                 decoder_inputs_embeds=prefix_embeds,
@@ -206,6 +219,7 @@ class GeneratorModel(nn.Module):
             )
             
             transferred_sentences = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+            print(f"DEBUG: Generated {len(transferred_sentences)} sentences. First example: {transferred_sentences[0][:50]}...")
             return generated_ids, transferred_sentences, outputs.loss
         
         else:
@@ -218,6 +232,7 @@ class GeneratorModel(nn.Module):
             )
             
             transferred_sentences = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+            print(f"DEBUG: Generated {len(transferred_sentences)} sentences. First example: {transferred_sentences[0][:50]}...")
             return generated_ids, transferred_sentences
     
     def forward(
@@ -230,11 +245,15 @@ class GeneratorModel(nn.Module):
         """Forward pass that can handle either text or images as input."""
         # If CLIP is enabled and images are provided, use the CLIP pathway
         if self.use_clip and images is not None:
+            print("DEBUG: Using CLIP pathway for forward pass")
             return self.forward_with_clip(images, target_sentences, device)
         
         # Otherwise, use the standard text-to-text pathway
         if sentences is None:
             raise ValueError("Either sentences or images must be provided")
+            
+        print(f"DEBUG: Processing {len(sentences)} text inputs")
+        print(f"DEBUG: First sentence: {sentences[0][:50]}...")
             
         # Tokenize input sentences
         inputs = self.tokenizer(sentences, 
@@ -242,17 +261,23 @@ class GeneratorModel(nn.Module):
             padding=self.padding, 
             max_length=self.max_seq_length,
             return_tensors="pt")
+            
+        print(f"DEBUG: Input tokens shape: {inputs.input_ids.shape}")
 
         if target_sentences is not None:
+            print(f"DEBUG: Target sentence: {target_sentences[0][:50]}...")
             labels = self.tokenizer(target_sentences,
                 truncation=self.truncation, 
                 padding=self.padding, 
                 max_length=self.max_seq_length,
                 return_tensors="pt").input_ids
+                
+            print(f"DEBUG: Target tokens shape: {labels.shape}")
             
             inputs = inputs.to(device)
             labels = labels.to(device)
             output_supervised = self.model(**inputs, labels=labels)
+            print(f"DEBUG: Supervised loss: {output_supervised.loss}")
         
         inputs = inputs.to(device)
         output = self.model.generate(
@@ -260,9 +285,12 @@ class GeneratorModel(nn.Module):
             forced_bos_token_id=self.tokenizer.lang_code_to_id[self.tgt_lang],
             max_length=self.max_seq_length
         )
+        
+        print(f"DEBUG: Generated tokens shape: {output.shape}")
 
         # Decode the output
         transferred_sentences = self.tokenizer.batch_decode(output, skip_special_tokens=True)
+        print(f"DEBUG: First transferred sentence: {transferred_sentences[0][:50]}...")
 
         if target_sentences is not None:
             return output, transferred_sentences, output_supervised.loss

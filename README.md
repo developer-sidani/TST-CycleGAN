@@ -148,3 +148,38 @@ numpages = {38},
 keywords = {Text Style Transfer, Sentiment transfer, Formality transfer, Cycle-consistent Generative Adversarial Networks, Transformers}
 }
 ```
+
+## Debugging and Data Flow
+
+Recent changes have added extensive debugging capabilities to trace data flow through the system:
+
+### Image-Text Processing
+- Added debug logs to track how images and captions are loaded from TSV/TXT/CSV files
+- Verification of image paths existence
+- Detailed logging in `ParallelImageTextDataset` for multilingual image captions
+
+### Model Flow Debugging  
+- `GeneratorModel`: Debug logs to track inputs (text or images), tokenization, and generation
+- `CycleGANModel`: Step-by-step logs during training cycle showing translation quality and loss values
+- Detailed shape information for tensor dimensions throughout the pipeline
+
+To see the debug output, run training as normal. The debug output will be printed to stdout.
+
+### CycleGAN Multimodal Architecture
+
+The system supports several training modes:
+1. **Caption mode**: Train the model to generate captions from images
+2. **Translation mode**: Train the model to translate between languages using images as context
+3. **Cycle mode**: Full CycleGAN training with cycle consistency between languages
+4. **Text reconstruction mode**: Train the model to auto-encode text
+
+Each mode works with combinations of these inputs:
+- Text inputs (sentences)
+- Image inputs
+- Image-caption pairs
+- CLIP embeddings
+
+The workflow uses:
+- CLIP for image/text encoding
+- MBart for text generation
+- Adapter networks (MLP, Hidden MLP, or Transformer) to map between embedding spaces

@@ -256,38 +256,68 @@ class ImageCaptionDataset(Dataset):
         self.transform = transform
         self.lang = lang
         
+        print(f"\nDEBUG: Loading ImageCaptionDataset")
+        print(f"DEBUG: Caption file: {caption_file}")
+        print(f"DEBUG: Image directory: {image_dir}")
+        print(f"DEBUG: Language: {lang}")
+        
         # Load captions
         self.data = []
         
         if caption_file.endswith('.tsv'):
+            print(f"DEBUG: Loading TSV caption file")
             # Tab-separated format (image_path \t caption)
             with open(caption_file, 'r', encoding='utf-8') as f:
-                for line in f:
+                for i, line in enumerate(f):
                     if '\t' in line:
                         img_path, caption = line.strip().split('\t', 1)
                         self.data.append((img_path, caption))
+                        # Print first few examples
+                        if i < 3:
+                            print(f"DEBUG: Sample {i}: Image={img_path}, Caption={caption[:50]}...")
+            print(f"DEBUG: Loaded {len(self.data)} image-caption pairs from TSV")
         elif caption_file.endswith('.txt'):
+            print(f"DEBUG: Loading TXT caption file")
             # Text file format (one caption per line, first token is image filename)
             with open(caption_file, 'r', encoding='utf-8') as f:
-                for line in f:
+                for i, line in enumerate(f):
                     parts = line.strip().split(' ', 1)
                     if len(parts) == 2:
                         img_path, caption = parts
                         self.data.append((img_path, caption))
+                        # Print first few examples
+                        if i < 3:
+                            print(f"DEBUG: Sample {i}: Image={img_path}, Caption={caption[:50]}...")
+            print(f"DEBUG: Loaded {len(self.data)} image-caption pairs from TXT")
         else:
+            print(f"DEBUG: Loading CSV caption file")
             # CSV format
             df = pd.read_csv(caption_file)
+            print(f"DEBUG: CSV columns: {df.columns.tolist()}")
             if 'image' in df.columns and 'caption' in df.columns:
-                for _, row in df.iterrows():
+                for i, (_, row) in enumerate(df.iterrows()):
                     self.data.append((row['image'], row['caption']))
+                    # Print first few examples
+                    if i < 3:
+                        print(f"DEBUG: Sample {i}: Image={row['image']}, Caption={row['caption'][:50]}...")
             else:
                 raise ValueError(f"CSV file must have 'image' and 'caption' columns")
+            print(f"DEBUG: Loaded {len(self.data)} image-caption pairs from CSV")
         
         # Apply max samples limit
         if max_dataset_samples is not None and max_dataset_samples < len(self.data):
             random.seed(42)  # For reproducibility
             ix = random.sample(range(0, len(self.data)), max_dataset_samples)
             self.data = [self.data[i] for i in ix]
+            print(f"DEBUG: Limited dataset to {len(self.data)} samples")
+            
+        # Verify image paths
+        for i, (img_path, _) in enumerate(self.data[:5]):
+            full_path = os.path.join(self.image_dir, img_path)
+            exists = os.path.exists(full_path)
+            print(f"DEBUG: Image {i} path check: {full_path} - Exists: {exists}")
+            
+        print(f"DEBUG: ImageCaptionDataset loading complete with {len(self.data)} samples")
     
     def __len__(self):
         return len(self.data)
@@ -350,27 +380,50 @@ class ParallelImageTextDataset(Dataset):
         self.src_lang = src_lang
         self.tgt_lang = tgt_lang
         
+        print(f"\nDEBUG: Loading ParallelImageTextDataset")
+        print(f"DEBUG: Source caption file: {caption_file_src}")
+        print(f"DEBUG: Target caption file: {caption_file_tgt if caption_file_tgt else 'None (using source file)'}")
+        print(f"DEBUG: Image directory: {image_dir}")
+        print(f"DEBUG: Source language: {src_lang}, Target language: {tgt_lang}")
+        
         # Load source captions
         self.data = []
         
         if caption_file_tgt is None:
+            print(f"DEBUG: Using single file for both source and target captions")
             # Assume single file with both source and target captions
             if caption_file_src.endswith('.tsv'):
+                print(f"DEBUG: Loading TSV caption file with both languages")
                 # Format: image_path \t source_caption \t target_caption
                 with open(caption_file_src, 'r', encoding='utf-8') as f:
-                    for line in f:
+                    for i, line in enumerate(f):
                         parts = line.strip().split('\t')
                         if len(parts) >= 3:
                             img_path, src_caption, tgt_caption = parts[0], parts[1], parts[2]
                             self.data.append((img_path, src_caption, tgt_caption))
+                            if i < 3:
+                                print(f"DEBUG: Sample {i}:")
+                                print(f"  Image: {img_path}")
+                                print(f"  Source ({src_lang}): {src_caption[:50]}...")
+                                print(f"  Target ({tgt_lang}): {tgt_caption[:50]}...")
+                print(f"DEBUG: Loaded {len(self.data)} triplets from TSV")
             elif caption_file_src.endswith('.csv'):
+                print(f"DEBUG: Loading CSV caption file with both languages")
                 df = pd.read_csv(caption_file_src)
+                print(f"DEBUG: CSV columns: {df.columns.tolist()}")
                 if 'image' in df.columns and src_lang in df.columns and tgt_lang in df.columns:
-                    for _, row in df.iterrows():
+                    for i, (_, row) in enumerate(df.iterrows()):
                         self.data.append((row['image'], row[src_lang], row[tgt_lang]))
+                        if i < 3:
+                            print(f"DEBUG: Sample {i}:")
+                            print(f"  Image: {row['image']}")
+                            print(f"  Source ({src_lang}): {row[src_lang][:50]}...")
+                            print(f"  Target ({tgt_lang}): {row[tgt_lang][:50]}...")
+                    print(f"DEBUG: Loaded {len(self.data)} triplets from CSV")
                 else:
                     raise ValueError(f"CSV file must have 'image', '{src_lang}', and '{tgt_lang}' columns")
         else:
+            print(f"DEBUG: Using separate files for source and target captions")
             # Separate files for source and target captions
             src_captions = []
             tgt_captions = []
@@ -378,35 +431,51 @@ class ParallelImageTextDataset(Dataset):
             
             # Load source captions
             if caption_file_src.endswith('.tsv'):
+                print(f"DEBUG: Loading source captions from TSV")
                 with open(caption_file_src, 'r', encoding='utf-8') as f:
-                    for line in f:
+                    for i, line in enumerate(f):
                         if '\t' in line:
                             img_path, caption = line.strip().split('\t', 1)
                             img_paths.append(img_path)
                             src_captions.append(caption)
+                            if i < 3:
+                                print(f"DEBUG: Source sample {i}: Image={img_path}, Caption={caption[:50]}...")
+                print(f"DEBUG: Loaded {len(src_captions)} source captions")
             elif caption_file_src.endswith('.txt'):
+                print(f"DEBUG: Loading source captions from TXT")
                 with open(caption_file_src, 'r', encoding='utf-8') as f:
-                    for line in f:
+                    for i, line in enumerate(f):
                         parts = line.strip().split(' ', 1)
                         if len(parts) == 2:
                             img_path, caption = parts
                             img_paths.append(img_path)
                             src_captions.append(caption)
+                            if i < 3:
+                                print(f"DEBUG: Source sample {i}: Image={img_path}, Caption={caption[:50]}...")
+                print(f"DEBUG: Loaded {len(src_captions)} source captions")
             
             # Load target captions (assuming same order and image paths)
             if caption_file_tgt.endswith('.tsv'):
+                print(f"DEBUG: Loading target captions from TSV")
                 with open(caption_file_tgt, 'r', encoding='utf-8') as f:
-                    for line in f:
+                    for i, line in enumerate(f):
                         if '\t' in line:
                             _, caption = line.strip().split('\t', 1)
                             tgt_captions.append(caption)
+                            if i < 3:
+                                print(f"DEBUG: Target sample {i}: Caption={caption[:50]}...")
+                print(f"DEBUG: Loaded {len(tgt_captions)} target captions")
             elif caption_file_tgt.endswith('.txt'):
+                print(f"DEBUG: Loading target captions from TXT")
                 with open(caption_file_tgt, 'r', encoding='utf-8') as f:
-                    for line in f:
+                    for i, line in enumerate(f):
                         parts = line.strip().split(' ', 1)
                         if len(parts) == 2:
                             _, caption = parts
                             tgt_captions.append(caption)
+                            if i < 3:
+                                print(f"DEBUG: Target sample {i}: Caption={caption[:50]}...")
+                print(f"DEBUG: Loaded {len(tgt_captions)} target captions")
             
             # Ensure all lists have the same length
             assert len(img_paths) == len(src_captions) == len(tgt_captions), \
@@ -414,12 +483,22 @@ class ParallelImageTextDataset(Dataset):
             
             # Combine data
             self.data = list(zip(img_paths, src_captions, tgt_captions))
+            print(f"DEBUG: Created {len(self.data)} image-text triplets")
         
         # Apply max samples limit
         if max_dataset_samples is not None and max_dataset_samples < len(self.data):
             random.seed(42)  # For reproducibility
             ix = random.sample(range(0, len(self.data)), max_dataset_samples)
             self.data = [self.data[i] for i in ix]
+            print(f"DEBUG: Limited dataset to {len(self.data)} samples")
+        
+        # Verify image paths
+        for i, (img_path, _, _) in enumerate(self.data[:5]):
+            full_path = os.path.join(self.image_dir, img_path)
+            exists = os.path.exists(full_path)
+            print(f"DEBUG: Image {i} path check: {full_path} - Exists: {exists}")
+            
+        print(f"DEBUG: ParallelImageTextDataset loading complete with {len(self.data)} samples")
     
     def __len__(self):
         return len(self.data)

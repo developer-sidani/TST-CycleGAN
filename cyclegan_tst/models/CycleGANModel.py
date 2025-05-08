@@ -124,14 +124,36 @@ class CycleGANModel(nn.Module):
             loss_logging: Dictionary for loss logging
             training_step: Current training step
         """
+        print(f"\nDEBUG: --- TRAINING CYCLE START - Step {training_step} ---")
+        
+        if sentences_a is not None:
+            print(f"DEBUG: Domain A text inputs: {len(sentences_a)}")
+            print(f"DEBUG: First A sentence: {sentences_a[0][:50]}...")
+        
+        if sentences_b is not None:
+            print(f"DEBUG: Domain B text inputs: {len(sentences_b)}")
+            print(f"DEBUG: First B sentence: {sentences_b[0][:50]}...")
+            
+        if images_a is not None:
+            print(f"DEBUG: Domain A image inputs: {len(images_a)}")
+            
+        if images_b is not None:
+            print(f"DEBUG: Domain B image inputs: {len(images_b)}")
+            
+        print(f"DEBUG: Lambdas (weights): {lambdas}")
         
         # ---------- BEGIN : cycle A -> B ----------
+        print(f"DEBUG: --- A->B Translation ---")
 
         # first half - select text or image input based on what's provided
         if self.use_clip and images_a is not None:
+            print(f"DEBUG: Using images as input for G_ab")
             out_transferred_ab, transferred_ab = self.G_ab(images=images_a, device=self.device)
         else:
+            print(f"DEBUG: Using text as input for G_ab")
             out_transferred_ab, transferred_ab = self.G_ab(sentences=sentences_a, device=self.device)
+        
+        print(f"DEBUG: G_ab output: {transferred_ab[0][:50]}...")
         
         # D_ab fake
         self.D_ab.eval()  # this loss is only for the Generator
@@ -140,17 +162,26 @@ class CycleGANModel(nn.Module):
         labels_fake_sentences = torch.column_stack((ones, zeros))  # one to the class index 0
         # print ("Discriminator labels:", labels_fake_sentences)
         _, loss_g_ab = self.D_ab(transferred_ab, labels_fake_sentences, device=self.device)
+        print(f"DEBUG: Discriminator G_ab loss: {loss_g_ab.item()}")
+        
         if lambdas[4] != 0:
             # labels_style_b_sentences = torch.column_stack((zeros, ones))
             labels_style_b_sentences = torch.ones(len(transferred_ab), dtype=int)
             _, loss_g_ab_cls = self.Cls(transferred_ab, labels_style_b_sentences, device=self.device)
+            print(f"DEBUG: Classifier G_ab loss: {loss_g_ab_cls.item()}")
         
         # second half - use generated text for the cycle consistency 
+        print(f"DEBUG: --- B->A Reconstruction ---")
         out_reconstructed_ba, reconstructed_ba, cycle_loss_aba = self.G_ba(sentences=transferred_ab, 
                                                                           target_sentences=sentences_a, 
                                                                           device=self.device)
+                                                                          
+        print(f"DEBUG: Reconstructed A: {reconstructed_ba[0][:50]}...")
+        print(f"DEBUG: Cycle loss A->B->A: {cycle_loss_aba.item()}")
 
         complete_loss_g_ab = lambdas[0]*cycle_loss_aba + lambdas[1]*loss_g_ab
+        print(f"DEBUG: Complete G_ab loss: {complete_loss_g_ab.item()}")
+        
         if comet_experiment is not None:
             with comet_experiment.train():
                 comet_experiment.log_metric(f"Cycle Loss A-B-A", lambdas[0]*cycle_loss_aba, step=training_step)
@@ -168,18 +199,23 @@ class CycleGANModel(nn.Module):
         complete_loss_g_ab.backward()
         
         # D_ab fake
+        print(f"DEBUG: --- Discriminator B Training ---")
         self.D_ab.train()
         zeros = torch.zeros(len(transferred_ab))
         ones = torch.ones(len(transferred_ab))
         labels_fake_sentences = torch.column_stack((zeros, ones))  # one to the class index 1
         _, loss_d_ab_fake = self.D_ab(transferred_ab, labels_fake_sentences, device=self.device) 
+        print(f"DEBUG: D_ab fake loss: {loss_d_ab_fake.item()}")
         
         # D_ab real
         zeros = torch.zeros(len(transferred_ab))
         ones = torch.ones(len(transferred_ab))
         labels_real_sentences = torch.column_stack((ones, zeros))  # one to the class index 0
-        _, loss_d_ab_real = self.D_ab(sentences_b, labels_real_sentences, device=self.device) 
+        _, loss_d_ab_real = self.D_ab(sentences_b, labels_real_sentences, device=self.device)
+        print(f"DEBUG: D_ab real loss: {loss_d_ab_real.item()}")
+        
         complete_loss_d_ab = lambdas[2]*loss_d_ab_fake + lambdas[3]*loss_d_ab_real
+        print(f"DEBUG: Complete D_ab loss: {complete_loss_d_ab.item()}")
 
         if comet_experiment is not None:
             with comet_experiment.train():
@@ -192,67 +228,89 @@ class CycleGANModel(nn.Module):
         # ----------  END : cycle A -> B  ----------
         
         # ---------- BEGIN : cycle B -> A ----------
+        print(f"DEBUG: --- B->A Translation ---")
         # first half - select text or image input based on what's provided
         if self.use_clip and images_b is not None:
+            print(f"DEBUG: Using images as input for G_ba")
             out_transferred_ba, transferred_ba = self.G_ba(images=images_b, device=self.device)
         else:
+            print(f"DEBUG: Using text as input for G_ba")
             out_transferred_ba, transferred_ba = self.G_ba(sentences=sentences_b, device=self.device)
 
-        # D_ba
-        self.D_ba.eval()  # this loss is only for the Generator
+        print(f"DEBUG: G_ba output: {transferred_ba[0][:50]}...")
+        
+        # D_ba fake
+        self.D_ba.eval()  # this loss is only for the Generator 
         zeros = torch.zeros(len(transferred_ba))
         ones = torch.ones(len(transferred_ba))
         labels_fake_sentences = torch.column_stack((ones, zeros))  # one to the class index 0
         _, loss_g_ba = self.D_ba(transferred_ba, labels_fake_sentences, device=self.device)
+        print(f"DEBUG: Discriminator G_ba loss: {loss_g_ba.item()}")
+        
         if lambdas[4] != 0:
             # labels_style_a_sentences = torch.column_stack((ones, zeros))
             labels_style_a_sentences = torch.zeros(len(transferred_ba), dtype=int)
             _, loss_g_ba_cls = self.Cls(transferred_ba, labels_style_a_sentences, device=self.device)
+            print(f"DEBUG: Classifier G_ba loss: {loss_g_ba_cls.item()}")
         
-        # second half - use generated text for the cycle consistency
+        # second half 
+        print(f"DEBUG: --- A->B Reconstruction ---")
         out_reconstructed_ab, reconstructed_ab, cycle_loss_bab = self.G_ab(sentences=transferred_ba, 
                                                                           target_sentences=sentences_b, 
                                                                           device=self.device)
-        
+                                                                          
+        print(f"DEBUG: Reconstructed B: {reconstructed_ab[0][:50]}...")
+        print(f"DEBUG: Cycle loss B->A->B: {cycle_loss_bab.item()}")
+
         complete_loss_g_ba = lambdas[0]*cycle_loss_bab + lambdas[1]*loss_g_ba
+        print(f"DEBUG: Complete G_ba loss: {complete_loss_g_ba.item()}")
+        
         if comet_experiment is not None:
             with comet_experiment.train():
                 comet_experiment.log_metric(f"Cycle Loss B-A-B", lambdas[0]*cycle_loss_bab, step=training_step)
                 comet_experiment.log_metric(f"Loss generator  B-A", lambdas[1]*loss_g_ba, step=training_step)
+                
         loss_logging['Cycle Loss B-A-B'].append(lambdas[0]*cycle_loss_bab.item())
         loss_logging['Loss generator  B-A'].append(lambdas[1]*loss_g_ba.item())
-
+                
         if lambdas[4] != 0:
             complete_loss_g_ba = complete_loss_g_ba + lambdas[4]*loss_g_ba_cls
             if comet_experiment is not None:
                 with comet_experiment.train():
                     comet_experiment.log_metric(f"Classifier-guided B-A", lambdas[4]*loss_g_ba_cls, step=training_step)
             loss_logging['Classifier-guided B-A'].append(lambdas[4]*loss_g_ba_cls.item())
-        
+                
+        # backward B -> A
         complete_loss_g_ba.backward()
-
+        
         # D_ba fake
+        print(f"DEBUG: --- Discriminator A Training ---")
         self.D_ba.train()
         zeros = torch.zeros(len(transferred_ba))
         ones = torch.ones(len(transferred_ba))
         labels_fake_sentences = torch.column_stack((zeros, ones))  # one to the class index 1
-        _, loss_d_ba_fake = self.D_ba(transferred_ba, labels_fake_sentences, device=self.device) 
-
+        _, loss_d_ba_fake = self.D_ba(transferred_ba, labels_fake_sentences, device=self.device)
+        print(f"DEBUG: D_ba fake loss: {loss_d_ba_fake.item()}")
+        
         # D_ba real
         zeros = torch.zeros(len(transferred_ba))
         ones = torch.ones(len(transferred_ba))
         labels_real_sentences = torch.column_stack((ones, zeros))  # one to the class index 0
-        _, loss_d_ba_real = self.D_ba(sentences_a, labels_real_sentences, device=self.device) 
+        _, loss_d_ba_real = self.D_ba(sentences_a, labels_real_sentences, device=self.device)
+        print(f"DEBUG: D_ba real loss: {loss_d_ba_real.item()}")
+        
         complete_loss_d_ba = lambdas[2]*loss_d_ba_fake + lambdas[3]*loss_d_ba_real
-
+        print(f"DEBUG: Complete D_ba loss: {complete_loss_d_ba.item()}")
+        
         if comet_experiment is not None:
             with comet_experiment.train():
                 comet_experiment.log_metric(f"Loss D(B->A)", complete_loss_d_ba, step=training_step)
         loss_logging['Loss D(B->A)'].append(complete_loss_d_ba.item())
-        
-        # backward A -> B
+                
+        # backward B -> A
         complete_loss_d_ba.backward()
         # ---------- END : cycle B -> A ----------
+        print(f"DEBUG: --- TRAINING CYCLE END ---\n")
 
     def save_models(
         self,
