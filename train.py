@@ -214,6 +214,82 @@ if args.training_phase == 'caption' and args.use_clip:
             max_dataset_samples=args.max_samples_eval,
             lang=args.lang
         )
+        
+        # After loading all datasets, before creating dataloaders
+        # Add conditional check for dataset printing
+        if args.training_phase == 'caption' and args.use_clip:
+            print(f"Train Dataset A (caption): {len(train_ds_a)} samples")
+            print(f"Train Dataset B (caption): {len(train_ds_b)} samples")
+            if args.caption_file_a_eval is not None and args.caption_file_b_eval is not None:
+                print(f"Eval Dataset A (caption): {len(eval_ds_a)} samples")
+                print(f"Eval Dataset B (caption): {len(eval_ds_b)} samples")
+            print()
+        
+        # Create dataloaders for image-caption datasets
+        mono_dl_a = DataLoader(train_ds_a,
+                              batch_size=args.batch_size,
+                              shuffle=args.shuffle,
+                              num_workers=args.num_workers,
+                              pin_memory=args.pin_memory,
+                              collate_fn=ImageCaptionDataset.collate_fn)
+        
+        mono_dl_b = DataLoader(train_ds_b,
+                              batch_size=args.batch_size,
+                              shuffle=args.shuffle,
+                              num_workers=args.num_workers,
+                              pin_memory=args.pin_memory,
+                              collate_fn=ImageCaptionDataset.collate_fn)
+        
+        # Create eval dataloaders if evaluation files are provided
+        if args.caption_file_a_eval is not None and args.caption_file_b_eval is not None:
+            mono_dl_a_eval = DataLoader(eval_ds_a,
+                                       batch_size=args.batch_size,
+                                       shuffle=False,
+                                       num_workers=args.num_workers,
+                                       pin_memory=args.pin_memory,
+                                       collate_fn=ImageCaptionDataset.collate_fn)
+            
+            mono_dl_b_eval = DataLoader(eval_ds_b,
+                                       batch_size=args.batch_size,
+                                       shuffle=False,
+                                       num_workers=args.num_workers,
+                                       pin_memory=args.pin_memory,
+                                       collate_fn=ImageCaptionDataset.collate_fn)
+            
+            print(f"Mono A eval (batches): {len(mono_dl_a_eval)}")
+            print(f"Mono B eval (batches): {len(mono_dl_b_eval)}")
+        
+        # Delete dataset objects to free memory
+        del train_ds_a, train_ds_b
+        if args.caption_file_a_eval is not None and args.caption_file_b_eval is not None:
+            del eval_ds_a, eval_ds_b
+    else:
+        # Original text-based mode
+        print(f"Mono A: {len(train_ds_a)}")
+        print(f"Mono B: {len(train_ds_b)}")
+        
+        if args.n_references is not None:
+            print(f"Parallel AB eval: {len(parallel_ds_evalAB)}")
+            print(f"Parallel BA eval: {len(parallel_ds_evalBA)}")
+        else:
+            print(f"Mono A eval: {len(train_ds_a)}")
+            print(f"Mono B eval: {len(train_ds_b)}")
+        print()
+
+        # Create DataLoaders for text-only mode (existing code)
+        mono_dl_a = DataLoader(train_ds_a,
+                            batch_size=args.batch_size,
+                            shuffle=args.shuffle,
+                            num_workers=args.num_workers,
+                            pin_memory=args.pin_memory)
+
+        mono_dl_b = DataLoader(train_ds_b,
+                            batch_size=args.batch_size,
+                            shuffle=args.shuffle,
+                            num_workers=args.num_workers,
+                            pin_memory=args.pin_memory)
+        del train_ds_a, train_ds_b
+
 elif args.training_phase == 'translate' and args.use_clip:
     # Image-text parallel translation phase
     train_ds_a = ParallelImageTextDataset(
@@ -256,6 +332,53 @@ elif args.training_phase == 'translate' and args.use_clip:
             src_lang=args.style_b,
             tgt_lang=args.style_a
         )
+    else:
+        # Similar handling for translate mode with ParallelImageTextDataset
+        print(f"Train Dataset A (translate): {len(train_ds_a)} samples")
+        print(f"Train Dataset B (translate): {len(train_ds_b)} samples")
+        if args.caption_file_a_eval is not None and args.caption_file_b_eval is not None:
+            print(f"Eval Dataset A (translate): {len(eval_ds_a)} samples")
+            print(f"Eval Dataset B (translate): {len(eval_ds_b)} samples")
+        print()
+        
+        # Create dataloaders for parallel image-text datasets
+        mono_dl_a = DataLoader(train_ds_a,
+                              batch_size=args.batch_size,
+                              shuffle=args.shuffle,
+                              num_workers=args.num_workers,
+                              pin_memory=args.pin_memory,
+                              collate_fn=ParallelImageTextDataset.collate_fn)
+        
+        mono_dl_b = DataLoader(train_ds_b,
+                              batch_size=args.batch_size,
+                              shuffle=args.shuffle,
+                              num_workers=args.num_workers,
+                              pin_memory=args.pin_memory,
+                              collate_fn=ParallelImageTextDataset.collate_fn)
+        
+        # Create eval dataloaders if evaluation files are provided
+        if args.caption_file_a_eval is not None and args.caption_file_b_eval is not None:
+            mono_dl_a_eval = DataLoader(eval_ds_a,
+                                       batch_size=args.batch_size,
+                                       shuffle=False,
+                                       num_workers=args.num_workers,
+                                       pin_memory=args.pin_memory,
+                                       collate_fn=ParallelImageTextDataset.collate_fn)
+            
+            mono_dl_b_eval = DataLoader(eval_ds_b,
+                                       batch_size=args.batch_size,
+                                       shuffle=False,
+                                       num_workers=args.num_workers,
+                                       pin_memory=args.pin_memory,
+                                       collate_fn=ParallelImageTextDataset.collate_fn)
+            
+            print(f"Mono A eval (batches): {len(mono_dl_a_eval)}")
+            print(f"Mono B eval (batches): {len(mono_dl_b_eval)}")
+        
+        # Delete dataset objects to free memory
+        del train_ds_a, train_ds_b
+        if args.caption_file_a_eval is not None and args.caption_file_b_eval is not None:
+            del eval_ds_a, eval_ds_b
 else:
     # Standard text-based datasets for CycleGAN
     mono_ds_a = MonostyleDataset(dataset_format="line_file",
@@ -527,6 +650,88 @@ loss_logging['hyper_params'] = hyper_params
 progress_bar = tqdm(range(num_training_steps))
 progress_bar.update(current_training_step)
 
+class Evaluator():
+
+    def __init__(self, cycleGAN, args, experiment):
+        self.cycleGAN = cycleGAN
+        self.args = args
+        self.experiment = experiment
+        self.device = cycleGAN.device
+        self.n_sentences_eval = 20
+
+        if args.pretrained_classifier_eval is not None:
+            self.classifier = ClassifierModel(args.pretrained_classifier_eval, max_seq_length=64)
+            
+    def image_caption_eval(self, epoch, current_training_step, phase, 
+                          caption_dl_a_eval, caption_dl_b_eval):
+        """Evaluation method for image-caption training mode."""
+        print(f'Start {phase} for image-caption mode...')
+        self.cycleGAN.eval()  # set evaluation mode
+        
+        if self.args.comet_logging:
+            if phase == 'validation': context = self.experiment.validate
+            elif phase == 'test': context = self.experiment.test
+        
+        # Initialize metrics
+        caption_loss_a = 0.0
+        caption_loss_b = 0.0
+        n_batches = 0
+        
+        # Evaluate on each batch
+        for batch_a, batch_b in zip(caption_dl_a_eval, caption_dl_b_eval):
+            images_a, captions_a = batch_a
+            images_b, captions_b = batch_b
+            
+            with torch.no_grad():
+                # Generate captions from images
+                _, _, loss_a = self.cycleGAN.G_ab.forward_with_clip(images_a, captions_a, device=self.device)
+                _, _, loss_b = self.cycleGAN.G_ba.forward_with_clip(images_b, captions_b, device=self.device)
+                
+                # Accumulate metrics
+                caption_loss_a += loss_a.item()
+                caption_loss_b += loss_b.item()
+                n_batches += 1
+        
+        # Calculate average loss
+        avg_loss_a = caption_loss_a / max(n_batches, 1)
+        avg_loss_b = caption_loss_b / max(n_batches, 1)
+        
+        # Print results
+        print(f'{phase} results:')
+        print(f'  Avg caption loss A: {avg_loss_a:.4f}')
+        print(f'  Avg caption loss B: {avg_loss_b:.4f}')
+        
+        # Log metrics to experiment
+        if self.args.comet_logging:
+            with context():
+                self.experiment.log_metric(f'{phase}_caption_loss_a', avg_loss_a, step=current_training_step)
+                self.experiment.log_metric(f'{phase}_caption_loss_b', avg_loss_b, step=current_training_step)
+        
+        # Run additional evaluation every 10 steps to check actual generated captions
+        if current_training_step % 10 == 0:
+            # Generate and log sample captions
+            if len(images_a) > 0:
+                with torch.no_grad():
+                    output_a, _, _ = self.cycleGAN.G_ab.forward_with_clip(
+                        images=[images_a[0]], device=self.device)
+                    output_b, _, _ = self.cycleGAN.G_ba.forward_with_clip(
+                        images=[images_b[0]], device=self.device)
+                
+                print(f'Sample generation:')
+                print(f'  Ground truth A: {captions_a[0]}')
+                print(f'  Generated from A: {output_a[0]}')
+                print(f'  Ground truth B: {captions_b[0]}')
+                print(f'  Generated from B: {output_b[0]}')
+                
+                if self.args.comet_logging:
+                    with context():
+                        self.experiment.log_text(f"Sample GT A: {captions_a[0]}")
+                        self.experiment.log_text(f"Sample Gen A: {output_a[0]}")
+                        self.experiment.log_text(f"Sample GT B: {captions_b[0]}")
+                        self.experiment.log_text(f"Sample Gen B: {output_b[0]}")
+        
+        return avg_loss_a, avg_loss_b
+
 evaluator = Evaluator(cycleGAN, args, experiment)
 
 print('Start training...')
@@ -621,13 +826,26 @@ for epoch in range(start_epoch, args.epochs):
             if args.n_references is None: evaluator.dummy_classif()
             elif args.bertscore: evaluator.dummy_bscore()
         if (args.eval_strategy == "steps" and current_training_step%args.eval_steps==0) or (epoch < args.additional_eval and current_training_step%(n_batch_epoch//2+1)==0):
-            if args.n_references is not None:
+            if args.training_phase == 'caption' and args.use_clip:
+                if args.caption_file_a_eval is not None and args.caption_file_b_eval is not None:
+                    evaluator.image_caption_eval(epoch, current_training_step, 'validation', mono_dl_a_eval, mono_dl_b_eval)
+            elif args.training_phase == 'translate' and args.use_clip:
+                if args.caption_file_a_eval is not None and args.caption_file_b_eval is not None:
+                    evaluator.image_caption_eval(epoch, current_training_step, 'validation', mono_dl_a_eval, mono_dl_b_eval)
+            elif args.n_references is not None:
                 evaluator.run_eval_ref(epoch, current_training_step, 'validation', parallel_dl_evalAB, parallel_dl_evalBA)
             else:
                 evaluator.run_eval_mono(epoch, current_training_step, 'validation', mono_dl_a_eval, mono_dl_b_eval)
             cycleGAN.train()
 
-    if args.n_references is not None:
+    # End of epoch evaluation
+    if args.training_phase == 'caption' and args.use_clip:
+        if args.caption_file_a_eval is not None and args.caption_file_b_eval is not None:
+            evaluator.image_caption_eval(epoch, current_training_step, 'validation', mono_dl_a_eval, mono_dl_b_eval)
+    elif args.training_phase == 'translate' and args.use_clip:
+        if args.caption_file_a_eval is not None and args.caption_file_b_eval is not None:
+            evaluator.image_caption_eval(epoch, current_training_step, 'validation', mono_dl_a_eval, mono_dl_b_eval)
+    elif args.n_references is not None:
         evaluator.run_eval_ref(epoch, current_training_step, 'validation', parallel_dl_evalAB, parallel_dl_evalBA)
     else:
         evaluator.run_eval_mono(epoch, current_training_step, 'validation', mono_dl_a_eval, mono_dl_b_eval)
