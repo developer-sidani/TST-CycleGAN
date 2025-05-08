@@ -151,6 +151,36 @@ if args.use_clip:
 
 # Load datasets based on training phase
 if args.training_phase == 'caption' and args.use_clip:
+    # Check and fix image directory path
+    print(f"DEBUG: Checking image directory path: {args.image_dir}")
+    if not os.path.exists(args.image_dir):
+        print(f"WARNING: Image directory does not exist: {args.image_dir}")
+        
+        # Try to find the correct path
+        # First check if data/images exists
+        if os.path.exists("data/images"):
+            potential_path = "data/images"
+            print(f"Found potential image directory: {potential_path}")
+            args.image_dir = potential_path
+        
+        # Try also common variations
+        potential_paths = [
+            os.path.join("data", "flickr30k_images"),
+            os.path.join("data", "flickr30k", "images"),
+            os.path.join("data", "multi30k", "images"),
+            "images",
+            os.path.join("data", "images", "train"),
+            os.path.join("data", "train")
+        ]
+        
+        for path in potential_paths:
+            if os.path.exists(path):
+                print(f"Found potential image directory: {path}")
+                args.image_dir = path
+                break
+                
+        print(f"Using image directory: {args.image_dir}")
+    
     # Image captioning phase - load image-caption datasets
     train_ds_a = ImageCaptionDataset(
         image_dir=args.image_dir,

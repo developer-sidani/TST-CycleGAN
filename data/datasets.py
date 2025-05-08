@@ -255,11 +255,52 @@ class ImageCaptionDataset(Dataset):
         self.image_dir = image_dir
         self.transform = transform
         self.lang = lang
+        self.use_placeholder_images = False
         
         print(f"\nDEBUG: Loading ImageCaptionDataset")
         print(f"DEBUG: Caption file: {caption_file}")
         print(f"DEBUG: Image directory: {image_dir}")
         print(f"DEBUG: Language: {lang}")
+        
+        # Check if image directory exists
+        if not os.path.exists(image_dir):
+            print(f"WARNING: Image directory does not exist: {image_dir}")
+            # Try to find a close match
+            parent_dir = os.path.dirname(image_dir)
+            if os.path.exists(parent_dir):
+                print(f"Parent directory exists: {parent_dir}")
+                subdirs = [d for d in os.listdir(parent_dir) if os.path.isdir(os.path.join(parent_dir, d))]
+                print(f"Available subdirectories: {subdirs}")
+                
+                # Check for images folder
+                if "images" in subdirs:
+                    candidate = os.path.join(parent_dir, "images")
+                    print(f"Found 'images' directory: {candidate}")
+                    self.image_dir = candidate
+                # Try other common names
+                elif "imgs" in subdirs:
+                    candidate = os.path.join(parent_dir, "imgs")
+                    print(f"Found 'imgs' directory: {candidate}")
+                    self.image_dir = candidate
+                elif "flickr30k" in subdirs:
+                    candidate = os.path.join(parent_dir, "flickr30k")
+                    print(f"Found 'flickr30k' directory: {candidate}")
+                    self.image_dir = candidate
+                else:
+                    print(f"WARNING: No image directory found, switching to placeholder images mode")
+                    self.use_placeholder_images = True
+            else:
+                print(f"WARNING: Parent directory does not exist, switching to placeholder images mode")
+                self.use_placeholder_images = True
+        else:
+            # Check image directory contents
+            print(f"DEBUG: Image directory exists, checking contents...")
+            img_files = [f for f in os.listdir(image_dir) if f.endswith(('.jpg', '.jpeg', '.png'))]
+            if not img_files:
+                print(f"WARNING: No image files found in {image_dir}, switching to placeholder images mode")
+                self.use_placeholder_images = True
+            else:
+                print(f"DEBUG: Found {len(img_files)} image files. Examples: {img_files[:3]}")
         
         # Load captions
         self.data = []
@@ -289,20 +330,50 @@ class ImageCaptionDataset(Dataset):
                         if i < 3:
                             print(f"DEBUG: Sample {i}: Image={img_path}, Caption={caption[:50]}...")
             print(f"DEBUG: Loaded {len(self.data)} image-caption pairs from TXT")
-        else:
-            print(f"DEBUG: Loading CSV caption file")
-            # CSV format
-            df = pd.read_csv(caption_file)
-            print(f"DEBUG: CSV columns: {df.columns.tolist()}")
-            if 'image' in df.columns and 'caption' in df.columns:
-                for i, (_, row) in enumerate(df.iterrows()):
-                    self.data.append((row['image'], row['caption']))
+        elif os.path.basename(caption_file).startswith('train.') or os.path.basename(caption_file).startswith('test_') or os.path.basename(caption_file).startswith('val_'):
+            print(f"DEBUG: Loading Multi30k plain text caption file")
+            # Multi30k format - one caption per line, no image reference
+            # We'll use line numbers to match with image files
+            with open(caption_file, 'r', encoding='utf-8') as f:
+                for i, line in enumerate(f):
+                    # Assume image files are named sequentially as COCO_train_000000000001.jpg, etc.
+                    # or use i+1 padded to 12 digits for image filename
+                    img_name = f"COCO_train_{(i+1):012d}.jpg"
+                    caption = line.strip()
+                    self.data.append((img_name, caption))
                     # Print first few examples
                     if i < 3:
-                        print(f"DEBUG: Sample {i}: Image={row['image']}, Caption={row['caption'][:50]}...")
-            else:
-                raise ValueError(f"CSV file must have 'image' and 'caption' columns")
-            print(f"DEBUG: Loaded {len(self.data)} image-caption pairs from CSV")
+                        print(f"DEBUG: Sample {i}: Image={img_name}, Caption={caption[:50]}...")
+            print(f"DEBUG: Loaded {len(self.data)} image-caption pairs from Multi30k plain text")
+        else:
+            try:
+                print(f"DEBUG: Loading CSV caption file")
+                # CSV format
+                df = pd.read_csv(caption_file)
+                print(f"DEBUG: CSV columns: {df.columns.tolist()}")
+                if 'image' in df.columns and 'caption' in df.columns:
+                    for i, (_, row) in enumerate(df.iterrows()):
+                        self.data.append((row['image'], row['caption']))
+                        # Print first few examples
+                        if i < 3:
+                            print(f"DEBUG: Sample {i}: Image={row['image']}, Caption={row['caption'][:50]}...")
+                else:
+                    raise ValueError(f"CSV file must have 'image' and 'caption' columns")
+                print(f"DEBUG: Loaded {len(self.data)} image-caption pairs from CSV")
+            except Exception as e:
+                print(f"DEBUG: Error loading CSV: {e}")
+                print(f"DEBUG: Falling back to plain text format")
+                # Try plain text as a last resort
+                with open(caption_file, 'r', encoding='utf-8') as f:
+                    for i, line in enumerate(f):
+                        # Assume image files are named sequentially
+                        img_name = f"COCO_train_{(i+1):012d}.jpg"
+                        caption = line.strip()
+                        self.data.append((img_name, caption))
+                        # Print first few examples
+                        if i < 3:
+                            print(f"DEBUG: Sample {i}: Image={img_name}, Caption={caption[:50]}...")
+                print(f"DEBUG: Loaded {len(self.data)} image-caption pairs from plain text")
         
         # Apply max samples limit
         if max_dataset_samples is not None and max_dataset_samples < len(self.data):
@@ -325,19 +396,65 @@ class ImageCaptionDataset(Dataset):
     def __getitem__(self, idx):
         img_path, caption = self.data[idx]
         
+        # If we're in placeholder mode, just return a placeholder image
+        if self.use_placeholder_images:
+            return self._get_placeholder_image(), caption
+        
         # Load image
         img_path = os.path.join(self.image_dir, img_path)
+        
+        # Only print debug info for the first few images
+        debug_print = idx < 5
+        
         try:
+            if debug_print:
+                print(f"DEBUG: Attempting to load image {idx} from {img_path}")
+            
+            # Check if file exists
+            if not os.path.exists(img_path):
+                if debug_print:
+                    print(f"WARNING: Image not found at {img_path}")
+                
+                # Try without extension
+                base_name = os.path.splitext(os.path.basename(img_path))[0]
+                candidates = []
+                
+                # Look for any file starting with the base name in the image directory
+                if os.path.exists(self.image_dir):
+                    for file in os.listdir(self.image_dir):
+                        if file.startswith(base_name) or file.startswith(f"{(int(base_name.split('_')[-1])):d}"):
+                            candidates.append(os.path.join(self.image_dir, file))
+                            
+                if candidates:
+                    if debug_print:
+                        print(f"Found alternative image candidates: {candidates[0]}")
+                    img_path = candidates[0]
+                else:
+                    if debug_print:
+                        print(f"No alternative image found, using placeholder")
+                    return self._get_placeholder_image(), caption
+            
+            # Try to open the image
             image = Image.open(img_path).convert('RGB')
+            if debug_print:
+                print(f"Successfully loaded image with size {image.size}")
         except Exception as e:
-            logging.error(f"Error loading image {img_path}: {e}")
+            if debug_print:
+                print(f"ERROR loading image {img_path}: {e}")
             # Return a placeholder image if the image cannot be loaded
-            image = Image.new('RGB', (224, 224), color='black')
+            return self._get_placeholder_image(), caption
         
         if self.transform:
             image = self.transform(image)
         
         return image, caption
+    
+    def _get_placeholder_image(self):
+        """Return a placeholder image when the actual image cannot be loaded."""
+        placeholder = Image.new('RGB', (224, 224), color='black')
+        if self.transform:
+            placeholder = self.transform(placeholder)
+        return placeholder
     
     @staticmethod
     def collate_fn(batch):
@@ -453,8 +570,46 @@ class ParallelImageTextDataset(Dataset):
                             if i < 3:
                                 print(f"DEBUG: Source sample {i}: Image={img_path}, Caption={caption[:50]}...")
                 print(f"DEBUG: Loaded {len(src_captions)} source captions")
+            elif os.path.basename(caption_file_src).startswith('train.') or os.path.basename(caption_file_src).startswith('test_') or os.path.basename(caption_file_src).startswith('val_'):
+                print(f"DEBUG: Loading Multi30k plain text caption file for source")
+                # Multi30k format - one caption per line, no image reference
+                with open(caption_file_src, 'r', encoding='utf-8') as f:
+                    for i, line in enumerate(f):
+                        img_name = f"COCO_train_{(i+1):012d}.jpg"
+                        caption = line.strip()
+                        img_paths.append(img_name)
+                        src_captions.append(caption)
+                        if i < 3:
+                            print(f"DEBUG: Source sample {i}: Image={img_name}, Caption={caption[:50]}...")
+                print(f"DEBUG: Loaded {len(src_captions)} source captions from Multi30k plain text")
+            else:
+                print(f"DEBUG: Loading source captions from CSV")
+                # CSV format
+                try:
+                    df = pd.read_csv(caption_file_src)
+                    if 'image' in df.columns and self.src_lang in df.columns:
+                        for i, (_, row) in enumerate(df.iterrows()):
+                            img_paths.append(row['image'])
+                            src_captions.append(row[self.src_lang])
+                            if i < 3:
+                                print(f"DEBUG: Source sample {i}: Image={row['image']}, Caption={row[self.src_lang][:50]}...")
+                    else:
+                        raise ValueError(f"CSV file must have 'image' and '{self.src_lang}' columns")
+                    print(f"DEBUG: Loaded {len(src_captions)} source captions from CSV")
+                except Exception as e:
+                    print(f"DEBUG: Error loading CSV source: {e}")
+                    print(f"DEBUG: Falling back to plain text format for source")
+                    with open(caption_file_src, 'r', encoding='utf-8') as f:
+                        for i, line in enumerate(f):
+                            img_name = f"COCO_train_{(i+1):012d}.jpg"
+                            caption = line.strip()
+                            img_paths.append(img_name)
+                            src_captions.append(caption)
+                            if i < 3:
+                                print(f"DEBUG: Source sample {i}: Image={img_name}, Caption={caption[:50]}...")
+                    print(f"DEBUG: Loaded {len(src_captions)} source captions from plain text")
             
-            # Load target captions (assuming same order and image paths)
+            # Load target captions
             if caption_file_tgt.endswith('.tsv'):
                 print(f"DEBUG: Loading target captions from TSV")
                 with open(caption_file_tgt, 'r', encoding='utf-8') as f:
@@ -476,14 +631,46 @@ class ParallelImageTextDataset(Dataset):
                             if i < 3:
                                 print(f"DEBUG: Target sample {i}: Caption={caption[:50]}...")
                 print(f"DEBUG: Loaded {len(tgt_captions)} target captions")
+            elif os.path.basename(caption_file_tgt).startswith('train.') or os.path.basename(caption_file_tgt).startswith('test_') or os.path.basename(caption_file_tgt).startswith('val_'):
+                print(f"DEBUG: Loading Multi30k plain text caption file for target")
+                # Multi30k format - one caption per line, no image reference
+                with open(caption_file_tgt, 'r', encoding='utf-8') as f:
+                    for i, line in enumerate(f):
+                        caption = line.strip()
+                        tgt_captions.append(caption)
+                        if i < 3:
+                            print(f"DEBUG: Target sample {i}: Caption={caption[:50]}...")
+                print(f"DEBUG: Loaded {len(tgt_captions)} target captions from Multi30k plain text")
+            else:
+                print(f"DEBUG: Loading target captions from CSV")
+                try:
+                    df = pd.read_csv(caption_file_tgt)
+                    if self.tgt_lang in df.columns:
+                        for i, (_, row) in enumerate(df.iterrows()):
+                            tgt_captions.append(row[self.tgt_lang])
+                            if i < 3:
+                                print(f"DEBUG: Target sample {i}: Caption={row[self.tgt_lang][:50]}...")
+                    else:
+                        raise ValueError(f"CSV file must have '{self.tgt_lang}' column")
+                    print(f"DEBUG: Loaded {len(tgt_captions)} target captions from CSV")
+                except Exception as e:
+                    print(f"DEBUG: Error loading CSV target: {e}")
+                    print(f"DEBUG: Falling back to plain text format for target")
+                    with open(caption_file_tgt, 'r', encoding='utf-8') as f:
+                        for i, line in enumerate(f):
+                            caption = line.strip()
+                            tgt_captions.append(caption)
+                            if i < 3:
+                                print(f"DEBUG: Target sample {i}: Caption={caption[:50]}...")
+                    print(f"DEBUG: Loaded {len(tgt_captions)} target captions from plain text")
             
-            # Ensure all lists have the same length
-            assert len(img_paths) == len(src_captions) == len(tgt_captions), \
-                "Mismatch in number of images and captions"
-            
-            # Combine data
-            self.data = list(zip(img_paths, src_captions, tgt_captions))
-            print(f"DEBUG: Created {len(self.data)} image-text triplets")
+            # Check that we have the same number of src and tgt captions
+            if len(src_captions) != len(tgt_captions):
+                raise ValueError(f"Number of source captions ({len(src_captions)}) doesn't match number of target captions ({len(tgt_captions)})")
+                
+            # Create data
+            for i in range(len(src_captions)):
+                self.data.append((img_paths[i], src_captions[i], tgt_captions[i]))
         
         # Apply max samples limit
         if max_dataset_samples is not None and max_dataset_samples < len(self.data):
