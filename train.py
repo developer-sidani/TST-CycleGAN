@@ -431,65 +431,63 @@ else:
                                           separator='\n',
                                           max_dataset_samples=args.max_samples_eval)
 
-print (f"Mono A  : {len(mono_ds_a)}")
-print (f"Mono B  : {len(mono_ds_b)}")
-if args.n_references is not None:
-    print (f"Parallel AB eval: {len(parallel_ds_evalAB)}")
-    print (f"Parallel BA eval: {len(parallel_ds_evalBA)}")
-else:
-    print (f"Mono A eval: {len(mono_ds_a_eval)}")
-    print (f"Mono B eval: {len(mono_ds_b_eval)}")
-print()
+    if args.n_references is not None:
+        print (f"Parallel AB eval: {len(parallel_ds_evalAB)}")
+        print (f"Parallel BA eval: {len(parallel_ds_evalBA)}")
+    else:
+        print (f"Mono A eval: {len(mono_ds_a_eval)}")
+        print (f"Mono B eval: {len(mono_ds_b_eval)}")
+    print()
 
 
-mono_dl_a = DataLoader(mono_ds_a,
-                        batch_size=args.batch_size,
-                        shuffle=args.shuffle,
-                        num_workers=args.num_workers,
-                        pin_memory=args.pin_memory)
+    mono_dl_a = DataLoader(mono_ds_a,
+                          batch_size=args.batch_size,
+                          shuffle=args.shuffle,
+                          num_workers=args.num_workers,
+                          pin_memory=args.pin_memory)
 
-mono_dl_b = DataLoader(mono_ds_b,
-                        batch_size=args.batch_size,
-                        shuffle=args.shuffle,
-                        num_workers=args.num_workers,
-                        pin_memory=args.pin_memory)
-del mono_ds_a, mono_ds_b
+    mono_dl_b = DataLoader(mono_ds_b,
+                          batch_size=args.batch_size,
+                          shuffle=args.shuffle,
+                          num_workers=args.num_workers,
+                          pin_memory=args.pin_memory)
+    del mono_ds_a, mono_ds_b
 
-if args.n_references is not None:
-    parallel_dl_evalAB = DataLoader(parallel_ds_evalAB,
+    if args.n_references is not None:
+        parallel_dl_evalAB = DataLoader(parallel_ds_evalAB,
+                                        batch_size=args.batch_size,
+                                        shuffle=False,
+                                        num_workers=args.num_workers,
+                                        pin_memory=args.pin_memory,
+                                        collate_fn=ParallelRefDataset.customCollate)
+        
+        parallel_dl_evalBA = DataLoader(parallel_ds_evalBA,
+                                        batch_size=args.batch_size,
+                                        shuffle=False,
+                                        num_workers=args.num_workers,
+                                        pin_memory=args.pin_memory,
+                                        collate_fn=ParallelRefDataset.customCollate)
+        del parallel_ds_evalAB, parallel_ds_evalBA
+    else:
+        mono_dl_a_eval = DataLoader(mono_ds_a_eval,
                                     batch_size=args.batch_size,
                                     shuffle=False,
                                     num_workers=args.num_workers,
-                                    pin_memory=args.pin_memory,
-                                    collate_fn=ParallelRefDataset.customCollate)
-    
-    parallel_dl_evalBA = DataLoader(parallel_ds_evalBA,
+                                    pin_memory=args.pin_memory)
+
+        mono_dl_b_eval = DataLoader(mono_ds_b_eval,
                                     batch_size=args.batch_size,
                                     shuffle=False,
                                     num_workers=args.num_workers,
-                                    pin_memory=args.pin_memory,
-                                    collate_fn=ParallelRefDataset.customCollate)
-    del parallel_ds_evalAB, parallel_ds_evalBA
-else:
-    mono_dl_a_eval = DataLoader(mono_ds_a_eval,
-                                batch_size=args.batch_size,
-                                shuffle=False,
-                                num_workers=args.num_workers,
-                                pin_memory=args.pin_memory)
+                                    pin_memory=args.pin_memory)
+        del mono_ds_a_eval, mono_ds_b_eval
 
-    mono_dl_b_eval = DataLoader(mono_ds_b_eval,
-                                batch_size=args.batch_size,
-                                shuffle=False,
-                                num_workers=args.num_workers,
-                                pin_memory=args.pin_memory)
-    del mono_ds_a_eval, mono_ds_b_eval
-
-if args.n_references is not None:
-    print (f"Parallel AB eval (batches): {len(parallel_dl_evalAB)}")
-    print (f"Parallel BA eval (batches): {len(parallel_dl_evalBA)}")
-else:
-    print (f"Mono A eval (batches): {len(mono_dl_a_eval)}")
-    print (f"Mono B eval (batches): {len(mono_dl_b_eval)}")
+    if args.n_references is not None:
+        print (f"Parallel AB eval (batches): {len(parallel_dl_evalAB)}")
+        print (f"Parallel BA eval (batches): {len(parallel_dl_evalBA)}")
+    else:
+        print (f"Mono A eval (batches): {len(mono_dl_a_eval)}")
+        print (f"Mono B eval (batches): {len(mono_dl_b_eval)}")
 
 
 ''' 
