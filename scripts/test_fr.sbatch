@@ -60,7 +60,6 @@ for ckpt_dir in "${CKPT_DIRS[@]}"; do
             --generator_model_tag facebook/mbart-large-50
             --discriminator_model_tag distilbert-base-multilingual-cased
             --test_ds $ds
-            --ckpt_dir $ckpt_dir
             --max_sequence_length=64 
             --batch_size=16 
             --pin_memory 
