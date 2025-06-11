@@ -6,8 +6,10 @@ from cyclegan_tst.models.CycleGANModel import CycleGANModel
 from cyclegan_tst.models.GeneratorModel import GeneratorModel
 from cyclegan_tst.models.DiscriminatorModel import DiscriminatorModel
 from cyclegan_tst.models.ClassifierModel import ClassifierModel
+from cyclegan_tst.models.CLIPTransGeneratorModel import CLIPTransGeneratorModel
 from eval import *
 from utils.utils import *
+from utils.checkpoint_utils import load_stage1_checkpoint
 
 import argparse
 import logging
@@ -50,6 +52,10 @@ parser.add_argument('--nonparal_same_size', action='store_true', dest="nonparal_
 parser.add_argument('--path_mono_A', type=str, dest="path_mono_A", help='Path to monostyle dataset (style A) for training.')
 parser.add_argument('--path_mono_B', type=str, dest="path_mono_B", help='Path to monostyle dataset (style B) for training.')
 
+# Parallel training dataset arguments
+parser.add_argument('--path_paral_A_train', type=str, dest="path_paral_A_train", help='Path to parallel dataset (style A) for training.')
+parser.add_argument('--path_paral_B_train', type=str, dest="path_paral_B_train", help='Path to parallel dataset (style B) for training.')
+
 parser.add_argument('--path_mono_A_eval', type=str, dest="path_mono_A_eval", help='Path to non-parallel dataset (style A) for evaluation.')
 parser.add_argument('--path_mono_B_eval', type=str, dest="path_mono_B_eval", help='Path to non-parallel dataset (style B) for evaluation.')
 parser.add_argument('--path_paral_A_eval', type=str, dest="path_paral_A_eval", help='Path to parallel dataset (style A) for evaluation.')
@@ -79,6 +85,8 @@ parser.add_argument('--generator_model_tag', type=str, dest="generator_model_tag
 parser.add_argument('--discriminator_model_tag', type=str, dest="discriminator_model_tag", help='The tag of the model discriminator (e.g., "distilbert-base-cased").')
 parser.add_argument('--pretrained_classifier_model', type=str, dest="pretrained_classifier_model", help='The folder to use as base path to load the pretrained classifier for classifier-guided loss.')
 parser.add_argument('--pretrained_classifier_eval', type=str, dest="pretrained_classifier_eval", help='The folder to use as base path to load the pretrained classifier for metrics evaluation.')
+parser.add_argument('--supervised_training', action='store_true', dest="supervised_training", default=False, help='Whether to use supervised training.')
+parser.add_argument('--supervised_loss_weight', type=float, dest="supervised_loss_weight", default=1.0, help='The weight of the supervised loss.')
 
 # arguments for saving the model and running evaluation
 parser.add_argument('--save_base_folder', type=str, dest="save_base_folder", help='The folder to use as base path to store model checkpoints')
@@ -98,6 +106,9 @@ parser.add_argument('--comet_key',       type=str,  dest="comet_key",       defa
 parser.add_argument('--comet_workspace', type=str,  dest="comet_workspace", default=None,  help='Comet workspace name (usually username in Comet, used only if comet_key is not None)')
 parser.add_argument('--comet_project_name',  type=str,  dest="comet_project_name",  default=None,  help='Comet experiment name (used only if comet_key is not None)')
 parser.add_argument('--comet_exp',  type=str,  dest="comet_exp",  default=None,  help='Comet experiment key to continue logging (used only if comet_key is not None)')
+
+parser.add_argument('--use_cliptrans', action='store_true', dest='use_cliptrans', default=False, help='Use CLIPTrans generator instead of standard generator')
+parser.add_argument('--cliptrans_stage1_ckpt', type=str, dest='cliptrans_stage1_ckpt', default=None, help='Path to CLIPTrans Stage 1 checkpoint base directory')
 
 args = parser.parse_args()
 
@@ -122,23 +133,60 @@ for key, value in vars(args).items():
 # lambdas: cycle-consistency, generator-fooling, disc-fake, disc-real, classifier-guided
 lambdas = [float(l) for l in args.lambdas.split('|')]
 args.lambdas = lambdas
+
+# Check if parallel training datasets are provided
+use_parallel_training = (args.path_paral_A_train is not None and args.path_paral_B_train is not None)
+
+if use_parallel_training:
+    print("Using parallel training datasets")
+    # Create a simple parallel dataset by loading both files and ensuring they're aligned
+    with open(args.path_paral_A_train, 'r') as f:
+        data_a = [line.strip() for line in f.readlines()]
+    with open(args.path_paral_B_train, 'r') as f:
+        data_b = [line.strip() for line in f.readlines()]
     
-mono_ds_a = MonostyleDataset(dataset_format="line_file",
-                            style=style_a,
-                            dataset_path=args.path_mono_A,
-                            separator='\n',
-                            max_dataset_samples=args.max_samples_train)
+    # Ensure both datasets have the same length
+    min_len = min(len(data_a), len(data_b))
+    data_a = data_a[:min_len]
+    data_b = data_b[:min_len]
+    
+    if args.max_samples_train is not None and args.max_samples_train < len(data_a):
+        import random
+        random.seed(42)
+        indices = random.sample(range(len(data_a)), args.max_samples_train)
+        data_a = [data_a[i] for i in indices]
+        data_b = [data_b[i] for i in indices]
+    
+    print(f"Parallel training data A: {len(data_a)} examples")
+    print(f"Parallel training data B: {len(data_b)} examples")
+    
+    # Create parallel dataset using existing ParallelRefDataset but adapting it
+    parallel_ds_train = ParallelRefDataset(
+        dataset_format='list',
+        sentences_list_src=data_a,
+        sentences_list_ref=[[b] for b in data_b],  # Wrap in list for ref format
+        style_src=style_a,
+        style_ref=style_b,
+        n_ref=1
+    )
+else:
+    print("Using mono training datasets")
+    mono_ds_a = MonostyleDataset(dataset_format="line_file",
+                                style=style_a,
+                                dataset_path=args.path_mono_A,
+                                separator='\n',
+                                max_dataset_samples=args.max_samples_train)
 
-mono_ds_b = MonostyleDataset(dataset_format="line_file",
-                            style=style_b,
-                            dataset_path=args.path_mono_B,
-                            separator='\n',
-                            max_dataset_samples=args.max_samples_train)
+    mono_ds_b = MonostyleDataset(dataset_format="line_file",
+                                style=style_b,
+                                dataset_path=args.path_mono_B,
+                                separator='\n',
+                                max_dataset_samples=args.max_samples_train)
 
-if args.nonparal_same_size:
-    mono_ds_a_len, mono_ds_b_len = len(mono_ds_a), len(mono_ds_b)
-    if mono_ds_a_len > mono_ds_b_len: mono_ds_a.reduce_data(mono_ds_b_len)
-    else: mono_ds_b.reduce_data(mono_ds_a_len)
+    if args.nonparal_same_size:
+        mono_ds_a_len, mono_ds_b_len = len(mono_ds_a), len(mono_ds_b)
+        if mono_ds_a_len > mono_ds_b_len: mono_ds_a.reduce_data(mono_ds_b_len)
+        else: mono_ds_b.reduce_data(mono_ds_a_len)
 
 if args.n_references is not None:
     parallel_ds_evalAB = ParallelRefDataset(dataset_format='line_file',
@@ -173,8 +221,12 @@ else:
                                       separator='\n',
                                       max_dataset_samples=args.max_samples_eval)
 
-print (f"Mono A  : {len(mono_ds_a)}")
-print (f"Mono B  : {len(mono_ds_b)}")
+if use_parallel_training:
+    print (f"Parallel training: {len(parallel_ds_train)}")
+else:
+    print (f"Mono A  : {len(mono_ds_a)}")
+    print (f"Mono B  : {len(mono_ds_b)}")
+
 if args.n_references is not None:
     print (f"Parallel AB eval: {len(parallel_ds_evalAB)}")
     print (f"Parallel BA eval: {len(parallel_ds_evalBA)}")
@@ -183,19 +235,28 @@ else:
     print (f"Mono B eval: {len(mono_ds_b_eval)}")
 print()
 
+# Create training dataloaders
+if use_parallel_training:
+    parallel_dl_train = DataLoader(parallel_ds_train,
+                                  batch_size=args.batch_size,
+                                  shuffle=args.shuffle,
+                                  num_workers=args.num_workers,
+                                  pin_memory=args.pin_memory,
+                                  collate_fn=ParallelRefDataset.customCollate)
+    del parallel_ds_train
+else:
+    mono_dl_a = DataLoader(mono_ds_a,
+                            batch_size=args.batch_size,
+                            shuffle=args.shuffle,
+                            num_workers=args.num_workers,
+                            pin_memory=args.pin_memory)
 
-mono_dl_a = DataLoader(mono_ds_a,
-                        batch_size=args.batch_size,
-                        shuffle=args.shuffle,
-                        num_workers=args.num_workers,
-                        pin_memory=args.pin_memory)
-
-mono_dl_b = DataLoader(mono_ds_b,
-                        batch_size=args.batch_size,
-                        shuffle=args.shuffle,
-                        num_workers=args.num_workers,
-                        pin_memory=args.pin_memory)
-del mono_ds_a, mono_ds_b
+    mono_dl_b = DataLoader(mono_ds_b,
+                            batch_size=args.batch_size,
+                            shuffle=args.shuffle,
+                            num_workers=args.num_workers,
+                            pin_memory=args.pin_memory)
+    del mono_ds_a, mono_ds_b
 
 if args.n_references is not None:
     parallel_dl_evalAB = DataLoader(parallel_ds_evalAB,
@@ -226,6 +287,12 @@ else:
                                 pin_memory=args.pin_memory)
     del mono_ds_a_eval, mono_ds_b_eval
 
+if use_parallel_training:
+    print (f"Parallel training (batches): {len(parallel_dl_train)}")
+else:
+    print (f"Mono A (batches): {len(mono_dl_a)}")
+    print (f"Mono B (batches): {len(mono_dl_b)}")
+
 if args.n_references is not None:
     print (f"Parallel AB eval (batches): {len(parallel_dl_evalAB)}")
     print (f"Parallel BA eval (batches): {len(parallel_dl_evalBA)}")
@@ -240,14 +307,61 @@ else:
     ----- ----- ----- ----- ----- ----- ----- -----
 '''
 
-if args.from_pretrained is not None:
-    G_ab = GeneratorModel(args.generator_model_tag, f'{args.from_pretrained}G_ab/', max_seq_length=args.max_sequence_length, src_lang=args.style_a, tgt_lang=args.style_b)
-    G_ba = GeneratorModel(args.generator_model_tag, f'{args.from_pretrained}G_ba/', max_seq_length=args.max_sequence_length, src_lang=args.style_b, tgt_lang=args.style_a)
-    print('Generator pretrained models loaded correctly')
+print("\n[DEBUG] Arguments passed to train.py:")
+for key, value in vars(args).items():
+    print(f"  {key}: {value}")
+
+if args.use_cliptrans:
+    if args.from_pretrained is not None:
+        # Resume from CycleGAN checkpoint - load CLIPTrans generators from saved checkpoint
+        print(f"[DEBUG] Loading CLIPTrans generators from CycleGAN checkpoint: {args.from_pretrained}")
+        G_ab = CLIPTransGeneratorModel(
+            model_name_or_path=f'{args.from_pretrained}G_ab/',
+            pretrained_path=None,  # Already contains trained weights
+            max_seq_length=args.max_sequence_length,
+            src_lang=args.style_a,
+            tgt_lang=args.style_b,
+            tokenizer_path=f'{args.from_pretrained}G_ab/tokenizer'
+        )
+        G_ba = CLIPTransGeneratorModel(
+            model_name_or_path=f'{args.from_pretrained}G_ba/',
+            pretrained_path=None,  # Already contains trained weights
+            max_seq_length=args.max_sequence_length,
+            src_lang=args.style_b,
+            tgt_lang=args.style_a,
+            tokenizer_path=f'{args.from_pretrained}G_ba/tokenizer'
+        )
+        print('CLIPTransGeneratorModel loaded from CycleGAN checkpoint.')
+    else:
+        # Fresh training - initialize from CLIPTrans Stage 1 checkpoints
+        stage1_ckpt_ab = load_stage1_checkpoint(args.cliptrans_stage1_ckpt, args.style_a, args.style_b) if args.cliptrans_stage1_ckpt else None
+        stage1_ckpt_ba = load_stage1_checkpoint(args.cliptrans_stage1_ckpt, args.style_b, args.style_a) if args.cliptrans_stage1_ckpt else None
+        print(f"[DEBUG] G_ab: src={args.style_a}, tgt={args.style_b}, stage1_ckpt={stage1_ckpt_ab}")
+        print(f"[DEBUG] G_ba: src={args.style_b}, tgt={args.style_a}, stage1_ckpt={stage1_ckpt_ba}")
+        G_ab = CLIPTransGeneratorModel(
+            model_name_or_path=args.generator_model_tag,
+            pretrained_path=stage1_ckpt_ab,
+            max_seq_length=args.max_sequence_length,
+            src_lang=args.style_a,
+            tgt_lang=args.style_b
+        )
+        G_ba = CLIPTransGeneratorModel(
+            model_name_or_path=args.generator_model_tag,
+            pretrained_path=stage1_ckpt_ba,
+            max_seq_length=args.max_sequence_length,
+            src_lang=args.style_b,
+            tgt_lang=args.style_a
+        )
+        print('CLIPTransGeneratorModel initialized from Stage 1 checkpoints.')
 else:
-    G_ab = GeneratorModel(args.generator_model_tag, max_seq_length=args.max_sequence_length, src_lang=args.style_a, tgt_lang=args.style_b)
-    G_ba = GeneratorModel(args.generator_model_tag, max_seq_length=args.max_sequence_length, src_lang=args.style_b, tgt_lang=args.style_a)
-    print('Generator pretrained models not loaded - Initial weights will be used')
+    if args.from_pretrained is not None:
+        G_ab = GeneratorModel(args.generator_model_tag, f'{args.from_pretrained}G_ab/', max_seq_length=args.max_sequence_length, src_lang=args.style_a, tgt_lang=args.style_b)
+        G_ba = GeneratorModel(args.generator_model_tag, f'{args.from_pretrained}G_ba/', max_seq_length=args.max_sequence_length, src_lang=args.style_b, tgt_lang=args.style_a)
+        print('Generator pretrained models loaded correctly')
+    else:
+        G_ab = GeneratorModel(args.generator_model_tag, max_seq_length=args.max_sequence_length, src_lang=args.style_a, tgt_lang=args.style_b)
+        G_ba = GeneratorModel(args.generator_model_tag, max_seq_length=args.max_sequence_length, src_lang=args.style_b, tgt_lang=args.style_a)
+        print('Generator pretrained models not loaded - Initial weights will be used')
 
 
 ''' 
@@ -292,7 +406,10 @@ else:
 
 cycleGAN = CycleGANModel(G_ab, G_ba, D_ab, D_ba, Cls, device=device)
 
-n_batch_epoch = min(len(mono_dl_a), len(mono_dl_b))
+if use_parallel_training:
+    n_batch_epoch = len(parallel_dl_train)
+else:
+    n_batch_epoch = min(len(mono_dl_a), len(mono_dl_b))
 num_training_steps = args.epochs * n_batch_epoch
 
 print(f"Total number of training steps: {num_training_steps}")
@@ -340,7 +457,8 @@ else:
     experiment = None
 
 loss_logging = {'Cycle Loss A-B-A':[], 'Loss generator  A-B':[], 'Classifier-guided A-B':[], 'Loss D(A->B)':[],
-                'Cycle Loss B-A-B':[], 'Loss generator  B-A':[], 'Classifier-guided B-A':[], 'Loss D(B->A)':[]}
+                'Cycle Loss B-A-B':[], 'Loss generator  B-A':[], 'Classifier-guided B-A':[], 'Loss D(B->A)':[],
+                'Supervised A-B':[], 'Supervised B-A':[]}
 loss_logging['hyper_params'] = hyper_params
 
 ''' 
@@ -359,34 +477,77 @@ for epoch in range(start_epoch, args.epochs):
     print (f"\nTraining epoch: {epoch}")
     cycleGAN.train() # set training mode
 
-    for unsupervised_a, unsupervised_b in zip(mono_dl_a, mono_dl_b):
-        len_a, len_b = len(unsupervised_a), len(unsupervised_b)
-        if len_a > len_b: unsupervised_a = unsupervised_a[:len_b]
-        else: unsupervised_b = unsupervised_b[:len_a]
+    if use_parallel_training:
+        # Use parallel training data
+        for batch in parallel_dl_train:
+            sentences_a, sentences_b_list = batch
+            sentences_b = tuple(sent[0] for sent in sentences_b_list)  # Extract first (and only) reference
+            
+            # For supervised training with parallel data:
+            # - sentences_a (source) -> sentences_b (target) => target_sentences_ab = sentences_b
+            # - sentences_b (source) -> sentences_a (target) => target_sentences_ba = sentences_a
+            target_sentences_ab = sentences_b if args.supervised_training else None
+            target_sentences_ba = sentences_a if args.supervised_training else None
+            
+            cycleGAN.training_cycle(sentences_a=sentences_a,
+                                    sentences_b=sentences_b,
+                                    target_sentences_ab=target_sentences_ab,
+                                    target_sentences_ba=target_sentences_ba,
+                                    lambdas=lambdas,
+                                    supervised_training=args.supervised_training,
+                                    supervised_loss_weight=args.supervised_loss_weight,
+                                    comet_experiment=experiment,
+                                    loss_logging=loss_logging,
+                                    training_step=current_training_step)
 
-        cycleGAN.training_cycle(sentences_a=unsupervised_a,
-                                sentences_b=unsupervised_b,
-                                lambdas=lambdas,
-                                comet_experiment=experiment,
-                                loss_logging=loss_logging,
-                                training_step=current_training_step)
+            optimizer.step()
+            lr_scheduler.step()
+            optimizer.zero_grad()
+            progress_bar.update(1)
+            current_training_step += 1
 
-        optimizer.step()
-        lr_scheduler.step()
-        optimizer.zero_grad()
-        progress_bar.update(1)
-        current_training_step += 1
+            # dummy classification metrics/BERTScore computation to see if it fits in GPU
+            if current_training_step==5:
+                if args.n_references is None: evaluator.dummy_classif()
+                elif args.bertscore: evaluator.dummy_bscore()
+            if (args.eval_strategy == "steps" and current_training_step%args.eval_steps==0) or (epoch < args.additional_eval and current_training_step%(n_batch_epoch//2+1)==0):
+                if args.n_references is not None:
+                    evaluator.run_eval_ref(epoch, current_training_step, 'validation', parallel_dl_evalAB, parallel_dl_evalBA)
+                else:
+                    evaluator.run_eval_mono(epoch, current_training_step, 'validation', mono_dl_a_eval, mono_dl_b_eval)
+                cycleGAN.train()
+    else:
+        # Use mono training data
+        for unsupervised_a, unsupervised_b in zip(mono_dl_a, mono_dl_b):
+            len_a, len_b = len(unsupervised_a), len(unsupervised_b)
+            if len_a > len_b: unsupervised_a = unsupervised_a[:len_b]
+            else: unsupervised_b = unsupervised_b[:len_a]
 
-        # dummy classification metrics/BERTScore computation to see if it fits in GPU
-        if current_training_step==5:
-            if args.n_references is None: evaluator.dummy_classif()
-            elif args.bertscore: evaluator.dummy_bscore()
-        if (args.eval_strategy == "steps" and current_training_step%args.eval_steps==0) or (epoch < args.additional_eval and current_training_step%(n_batch_epoch//2+1)==0):
-            if args.n_references is not None:
-                evaluator.run_eval_ref(epoch, current_training_step, 'validation', parallel_dl_evalAB, parallel_dl_evalBA)
-            else:
-                evaluator.run_eval_mono(epoch, current_training_step, 'validation', mono_dl_a_eval, mono_dl_b_eval)
-            cycleGAN.train()
+            cycleGAN.training_cycle(sentences_a=unsupervised_a,
+                                    sentences_b=unsupervised_b,
+                                    lambdas=lambdas,
+                                    supervised_training=args.supervised_training,
+                                    supervised_loss_weight=args.supervised_loss_weight,
+                                    comet_experiment=experiment,
+                                    loss_logging=loss_logging,
+                                    training_step=current_training_step)
+
+            optimizer.step()
+            lr_scheduler.step()
+            optimizer.zero_grad()
+            progress_bar.update(1)
+            current_training_step += 1
+
+            # dummy classification metrics/BERTScore computation to see if it fits in GPU
+            if current_training_step==5:
+                if args.n_references is None: evaluator.dummy_classif()
+                elif args.bertscore: evaluator.dummy_bscore()
+            if (args.eval_strategy == "steps" and current_training_step%args.eval_steps==0) or (epoch < args.additional_eval and current_training_step%(n_batch_epoch//2+1)==0):
+                if args.n_references is not None:
+                    evaluator.run_eval_ref(epoch, current_training_step, 'validation', parallel_dl_evalAB, parallel_dl_evalBA)
+                else:
+                    evaluator.run_eval_mono(epoch, current_training_step, 'validation', mono_dl_a_eval, mono_dl_b_eval)
+                cycleGAN.train()
 
     if args.n_references is not None:
         evaluator.run_eval_ref(epoch, current_training_step, 'validation', parallel_dl_evalAB, parallel_dl_evalBA)
@@ -408,5 +569,21 @@ for epoch in range(start_epoch, args.epochs):
                 os.remove(args.control_file)
                 break
     cycleGAN.train()
+
+    # Print a sample batch for debug
+    if use_parallel_training:
+        print("[DEBUG] Sample batch from parallel_dl_train:")
+        for batch in parallel_dl_train:
+            print(batch)
+            break
+    else:
+        print("[DEBUG] Sample batch from mono_dl_a:")
+        for batch in mono_dl_a:
+            print(batch)
+            break
+        print("[DEBUG] Sample batch from mono_dl_b:")
+        for batch in mono_dl_b:
+            print(batch)
+            break
 
 print('End training...')

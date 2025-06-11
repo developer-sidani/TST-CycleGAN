@@ -364,24 +364,70 @@ class Evaluator():
         
 
     def dummy_classif(self):
-        pred_A = ['wake up or you are going to lose your business .',
-                  'this place has none of them .',
-                  'it is april and there are no grass tees yet .',
-                  'there is no grass on the range .',
-                  'bottom line , this place sucks .',
-                  'someone should buy this place .',
-                  'very disappointed in the customer service .',
-                  'we will not be back .']
-        pred_B = ['huge sandwich !',
-                  'i added mushrooms , it was very flavorful .',
-                  'he enjoyed it as well .',
-                  'fast and friendly service .',
-                  'will definitely be back .',
-                  "my dad 's favorite .",
-                  'huge burgers , fish sandwiches , salads .',
-                  'decent service .']
+        # Get target language from args.style_b (as defined in train.py)
+        target_lang = self.args.style_b
+        
+        # pred_A = English sentences (should be classified as language A/English)
+        pred_A = [
+            'Two young, White males are outside near many bushes.',
+            'Several men in hard hats are operating a giant pulley system.',
+            'A little girl climbing into a wooden playhouse.',
+            'A man in a blue shirt is standing on a ladder cleaning a window.',
+            'Two men are at the stove preparing food.',
+            'A man in green holds a guitar while the other man observes his shirt.',
+            'A man is smiling at a stuffed lion.',
+            'A trendy girl talking on her cellphone while gliding slowly down the street.'
+        ]
+        
+        # pred_B = Target language sentences (should be classified as language B)
+        if target_lang == 'de':
+            pred_B = [
+                'Zwei junge weiße Männer sind im Freien in der Nähe vieler Büsche.',
+                'Mehrere Männer mit Schutzhelmen bedienen ein Antriebsradsystem.',
+                'Ein kleines Mädchen klettert in ein Spielhaus aus Holz.',
+                'Ein Mann in einem blauen Hemd steht auf einer Leiter und putzt ein Fenster.',
+                'Zwei Männer stehen am Herd und bereiten Essen zu.',
+                'Ein Mann in grün hält eine Gitarre, während der andere Mann sein Hemd ansieht.',
+                'Ein Mann lächelt einen ausgestopften Löwen an.',
+                'Ein schickes Mädchen spricht mit dem Handy während sie langsam die Straße entlangschwebt.'
+            ]
+        elif target_lang == 'fr':
+            pred_B = [
+                'Deux jeunes hommes blancs sont dehors près de buissons.',
+                'Plusieurs hommes en casque font fonctionner un système de poulies géant.',
+                'Une petite fille grimpe dans une maisonnette en bois.',
+                'Un homme dans une chemise bleue se tient sur une échelle pour nettoyer une fenêtre.',
+                'Deux hommes aux fourneaux préparent à manger.',
+                'Un homme en vert tient une guitare tandis qu\'un autre homme observe sa chemise.',
+                'Un homme sourit à un ours en peluche.',
+                'Une fille branchée parle à son portable tout en glissant lentement dans la rue.'
+            ]
+        elif target_lang == 'cs':
+            pred_B = [
+                'Dva mladí bílí muži jsou venku poblíž mnoha keřů.',
+                'Několik mužů v ochranných přilbách obsluhují velký kladkový systém.',
+                'Malá dívka leze do dřevěného hračkového domu.',
+                'Muž v modrém tričku stojí na žebříku a myje okno.',
+                'Dva muži připravují u sporáku jídlo.',
+                'Muž v zeleném drží kytaru zatímco další muž pozoruje jeho košili.',
+                'Muž se směje na vycpaného lva.',
+                'Modní dívka mluví do svého mobilního telefonu zatímco klouzá pomalu po ulici.'
+            ]
+        else:
+            # Fallback to German if unknown language
+            pred_B = [
+                'Zwei junge weiße Männer sind im Freien in der Nähe vieler Büsche.',
+                'Mehrere Männer mit Schutzhelmen bedienen ein Antriebsradsystem.',
+                'Ein kleines Mädchen klettert in ein Spielhaus aus Holz.',
+                'Ein Mann in einem blauen Hemd steht auf einer Leiter und putzt ein Fenster.',
+                'Zwei Männer stehen am Herd und bereiten Essen zu.',
+                'Ein Mann in grün hält eine Gitarre, während der andere Mann sein Hemd ansieht.',
+                'Ein Mann lächelt einen ausgestopften Löwen an.',
+                'Ein schickes Mädchen spricht mit dem Handy während sie langsam die Straße entlangschwebt.'
+            ]
+        
         acc, _, _, _ = self.__compute_classif_metrics__(pred_A, pred_B)
-        print('Dummy classification metrics computation end')
+        print(f'Dummy classification metrics computation end (target language: {target_lang})')
 
 
     def dummy_bscore(self):

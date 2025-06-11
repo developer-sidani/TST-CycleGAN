@@ -22,7 +22,84 @@ class ClassifierDataset(torch.utils.data.Dataset):
         return len(self.labels)
 
 
-def read_data(path, split, max_samples=None, lowercase=False):
+def read_data(path, split, max_samples=None, lowercase=False, lang1='en', lang2='de'):
+    """
+    Read parallel translation data for language classification.
+    
+    Args:
+        path: Base path to the Multi30K raw data directory
+        split: Data split ('train', 'val', 'test')
+        max_samples: Maximum samples to load (None for all)
+        lowercase: Whether to lowercase the text
+        lang1: First language code (label 0)
+        lang2: Second language code (label 1)
+    
+    Returns:
+        data: List of text samples
+        labels: List of corresponding language labels (0 for lang1, 1 for lang2)
+    """
+    data, labels = [], []
+    
+    # Handle different split naming conventions
+    if split == 'val' or split == 'dev':
+        # For validation, use the test_2016_val files
+        lang1_file = f"{path}/test_2016_val.{lang1}"
+        lang2_file = f"{path}/test_2016_val.{lang2}"
+    elif split == 'test':
+        # For test, use the test_2016_flickr files (most common test set)
+        lang1_file = f"{path}/test_2016_flickr.{lang1}"
+        lang2_file = f"{path}/test_2016_flickr.{lang2}"
+    else:
+        # For train split
+        lang1_file = f"{path}/{split}.{lang1}"
+        lang2_file = f"{path}/{split}.{lang2}"
+    
+    # Read lang1 data (label 0)
+    try:
+        with open(lang1_file, 'r', encoding='utf-8') as f:
+            lang1_texts = [line.strip() for line in f.readlines() if line.strip()]
+            
+        # Read lang2 data (label 1) 
+        with open(lang2_file, 'r', encoding='utf-8') as f:
+            lang2_texts = [line.strip() for line in f.readlines() if line.strip()]
+            
+        # Ensure parallel data has same length
+        min_len = min(len(lang1_texts), len(lang2_texts))
+        lang1_texts = lang1_texts[:min_len]
+        lang2_texts = lang2_texts[:min_len]
+        
+        # Apply max_samples limit
+        if max_samples is not None:
+            samples_per_lang = max_samples // 2
+            lang1_texts = lang1_texts[:samples_per_lang]
+            lang2_texts = lang2_texts[:samples_per_lang]
+        
+        # Apply lowercase if requested
+        if lowercase:
+            lang1_texts = [text.lower() for text in lang1_texts]
+            lang2_texts = [text.lower() for text in lang2_texts]
+        
+        # Combine data and labels
+        data.extend(lang1_texts)
+        data.extend(lang2_texts)
+        labels.extend([0] * len(lang1_texts))  # lang1 = label 0
+        labels.extend([1] * len(lang2_texts))  # lang2 = label 1
+        
+        print(f"Loaded {len(lang1_texts)} {lang1} samples and {len(lang2_texts)} {lang2} samples for {split}")
+        
+    except FileNotFoundError as e:
+        print(f"Error: Could not find data files for {split} split.")
+        print(f"Expected files: {lang1_file}, {lang2_file}")
+        print(f"Error details: {e}")
+        raise
+    
+    return data, labels
+
+
+def read_data_old(path, split, max_samples=None, lowercase=False):
+    """
+    Original read_data function for text style transfer format (kept for backward compatibility).
+    """
     data, labels = [], []
     for style in ['0', '1']:
         full_path = path + split + f'.{style}'

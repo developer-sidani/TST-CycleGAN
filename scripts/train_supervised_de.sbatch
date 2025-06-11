@@ -3,7 +3,7 @@
 #SBATCH --ntasks=1
 #SBATCH --partition=gpu_a40_ext
 #SBATCH --gres=gpu:1
-#SBATCH --job-name=clip_cycle_cs
+#SBATCH --job-name=clip_cycle_de
 #SBATCH --mem=40GB
 #SBATCH --output=/home/asidani/logs/clip_cycle/job_name_%j.log
 #SBATCH --error=/home/asidani/logs/clip_cycle/job_name_%j.err
@@ -33,32 +33,34 @@ send_discord "[${SLURM_JOB_ID}]: Starting Training"
 
 TRAIN_PARAMS_PROVA=(
     --style_a en
-    --style_b cs
+    --style_b de
     --lang en
     --path_mono_A /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/train.en
-    --path_mono_B /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/train.cs
+    --path_mono_B /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/train.de
     --path_paral_A_eval /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_2016_val.en
-    --path_paral_B_eval /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_2016_val.cs
-    --path_paral_eval_ref /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/val_cs/
+    --path_paral_B_eval /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/test_2016_val.de
+    --path_paral_eval_ref /home/asidani/TST-CycleGAN/data/multi30k/data/task1/raw/val_de/
     --n_references 1
     --shuffle
     --generator_model_tag facebook/mbart-large-50
     --discriminator_model_tag distilbert-base-multilingual-cased
     # --pretrained_classifier_model ./classifiers/paradetox/roberta-base_10/
-    --lambdas "1|10|1|1|0"
-    # --from_pretrained ./ckpts_cs_1e5_clip_1_10_1_1_0/epoch_24/
+    --lambdas "1|1|1|1|0"
+    # --from_pretrained ./ckpts_de_1e5_clip/epoch_24/
     --epochs 30
     --learning_rate 1e-5
     --max_sequence_length 64
     --batch_size 16
     --num_workers 1
-    --save_base_folder ./ckpts_cs_1e5_clip_1_10_1_1_0/
+    --save_base_folder ./ckpts_de_1e5_clip_supervised/
     --save_steps 1
     --eval_strategy epochs
     --eval_steps 1
     --pin_memory
     --use_cuda_if_available
     --comet_logging
+    --supervised_training
+    --supervised_loss_weight 10
     # --comet_key ""
     # --comet_workspace ""
     # --comet_exp "c910b29ce9854515bf27119552481de9"

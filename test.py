@@ -4,8 +4,10 @@ from data.datasets import MonostyleDataset, ParallelRefDataset
 from cyclegan_tst.models.CycleGANModel import CycleGANModel
 from cyclegan_tst.models.DiscriminatorModel import DiscriminatorModel
 from cyclegan_tst.models.GeneratorModel import GeneratorModel
+from cyclegan_tst.models.CLIPTransGeneratorModel import CLIPTransGeneratorModel
 from eval import *
 from utils.utils import *
+from utils.checkpoint_utils import load_stage1_checkpoint
 
 import argparse
 import logging
@@ -72,6 +74,9 @@ parser.add_argument('--comet_key',       type=str,  dest="comet_key",       defa
 parser.add_argument('--comet_workspace', type=str,  dest="comet_workspace", default=None,  help='Comet workspace name (usually username in Comet, used only if comet_key is not None')
 parser.add_argument('--comet_project_name',  type=str,  dest="comet_project_name",  default=None,  help='Comet experiment name (used only if comet_key is not None')
 parser.add_argument('--exp_group', type=str, dest="exp_group", default=None, help='To group experiments on Comet')
+
+parser.add_argument('--use_cliptrans', action='store_true', dest='use_cliptrans', default=False, help='Use CLIPTrans generator instead of standard generator')
+parser.add_argument('--cliptrans_stage1_ckpt', type=str, dest='cliptrans_stage1_ckpt', default=None, help='Path to CLIPTrans Stage 1 checkpoint base directory')
 
 args = parser.parse_args()
 
@@ -192,6 +197,10 @@ if args.from_pretrained is not None:
 else:
     checkpoints_paths, epochs = [''], [0]
 
+print("\n[DEBUG] Arguments passed to test.py:")
+for key, value in vars(args).items():
+    print(f"  {key}: {value}")
+
 ''' 
     ----- ----- ----- ----- ----- ----- ----- -----
                         TEST       
@@ -199,20 +208,53 @@ else:
 '''
 
 for checkpoint, epoch in zip(checkpoints_paths, epochs):
-    if args.from_pretrained is not None:
-        G_ab = GeneratorModel(args.generator_model_tag, f'{checkpoint}G_ab/', max_seq_length=args.max_sequence_length, src_lang=args.style_a, tgt_lang=args.style_b)
-        G_ba = GeneratorModel(args.generator_model_tag, f'{checkpoint}G_ba/', max_seq_length=args.max_sequence_length, src_lang=args.style_b, tgt_lang=args.style_a)
-        print('Generator pretrained models loaded correctly')
+    if args.use_cliptrans:
+        print(f"[DEBUG] Loading CLIPTrans models from CycleGAN checkpoint: {checkpoint}")
+        
+        # Initialize CLIPTrans generators with checkpoint path for dimension checking
+        # Use checkpoint directory for model loading to detect correct dimensions
+        g_ab_checkpoint_path = f'{checkpoint}G_ab/' if checkpoint and checkpoint != '' else None
+        g_ba_checkpoint_path = f'{checkpoint}G_ba/' if checkpoint and checkpoint != '' else None
+        
+        if not g_ab_checkpoint_path or not os.path.exists(g_ab_checkpoint_path):
+            raise FileNotFoundError(f"G_ab checkpoint not found: {g_ab_checkpoint_path}")
+        if not g_ba_checkpoint_path or not os.path.exists(g_ba_checkpoint_path):
+            raise FileNotFoundError(f"G_ba checkpoint not found: {g_ba_checkpoint_path}")
+        
+        G_ab = CLIPTransGeneratorModel(
+            model_name_or_path=g_ab_checkpoint_path,  # Use checkpoint path for dimension detection
+            pretrained_path=None,  # Will load via _load_cyclegan_checkpoint
+            max_seq_length=args.max_sequence_length,
+            src_lang=args.style_a,
+            tgt_lang=args.style_b
+        )
+        G_ba = CLIPTransGeneratorModel(
+            model_name_or_path=g_ba_checkpoint_path,  # Use checkpoint path for dimension detection
+            pretrained_path=None,  # Will load via _load_cyclegan_checkpoint
+            max_seq_length=args.max_sequence_length,
+            src_lang=args.style_b,
+            tgt_lang=args.style_a
+        )
+        
+        print('CLIPTrans models loaded from trained CycleGAN checkpoint.')
         D_ab = DiscriminatorModel(args.discriminator_model_tag, f'{checkpoint}D_ab/', max_seq_length=args.max_sequence_length)
         D_ba = DiscriminatorModel(args.discriminator_model_tag, f'{checkpoint}D_ba/', max_seq_length=args.max_sequence_length)
         print('Discriminator pretrained models loaded correctly')
     else:
-        G_ab = GeneratorModel(args.generator_model_tag, max_seq_length=args.max_sequence_length, src_lang=args.style_a, tgt_lang=args.style_b)
-        G_ba = GeneratorModel(args.generator_model_tag, max_seq_length=args.max_sequence_length, src_lang=args.style_b, tgt_lang=args.style_a)
-        print('Generator pretrained models not loaded - Initial weights will be used')
-        D_ab = DiscriminatorModel(args.discriminator_model_tag, max_seq_length=args.max_sequence_length)
-        D_ba = DiscriminatorModel(args.discriminator_model_tag, max_seq_length=args.max_sequence_length)
-        print('Discriminator pretrained models not loaded - Initial weights will be used')
+        if args.from_pretrained is not None:
+            G_ab = GeneratorModel(args.generator_model_tag, f'{checkpoint}G_ab/', max_seq_length=args.max_sequence_length, src_lang=args.style_a, tgt_lang=args.style_b)
+            G_ba = GeneratorModel(args.generator_model_tag, f'{checkpoint}G_ba/', max_seq_length=args.max_sequence_length, src_lang=args.style_b, tgt_lang=args.style_a)
+            print('Generator pretrained models loaded correctly')
+            D_ab = DiscriminatorModel(args.discriminator_model_tag, f'{checkpoint}D_ab/', max_seq_length=args.max_sequence_length)
+            D_ba = DiscriminatorModel(args.discriminator_model_tag, f'{checkpoint}D_ba/', max_seq_length=args.max_sequence_length)
+            print('Discriminator pretrained models loaded correctly')
+        else:
+            G_ab = GeneratorModel(args.generator_model_tag, max_seq_length=args.max_sequence_length, src_lang=args.style_a, tgt_lang=args.style_b)
+            G_ba = GeneratorModel(args.generator_model_tag, max_seq_length=args.max_sequence_length, src_lang=args.style_b, tgt_lang=args.style_a)
+            print('Generator pretrained models not loaded - Initial weights will be used')
+            D_ab = DiscriminatorModel(args.discriminator_model_tag, max_seq_length=args.max_sequence_length)
+            D_ba = DiscriminatorModel(args.discriminator_model_tag, max_seq_length=args.max_sequence_length)
+            print('Discriminator pretrained models not loaded - Initial weights will be used')
     
     cycleGAN = CycleGANModel(G_ab, G_ba, D_ab, D_ba, None, device=device)
     evaluator = Evaluator(cycleGAN, args, experiment)
@@ -221,5 +263,25 @@ for checkpoint, epoch in zip(checkpoints_paths, epochs):
         evaluator.run_eval_ref(epoch, epoch, 'test', parallel_dl_testAB, parallel_dl_testBA)
     else:
         evaluator.run_eval_mono(epoch, epoch, 'test', mono_dl_a_test, mono_dl_b_test)
+
+    # Print a sample batch from the test dataloaders for debug
+    if args.n_references is not None:
+        print("[DEBUG] Sample batch from parallel_dl_testAB:")
+        for batch in parallel_dl_testAB:
+            print(batch)
+            break
+        print("[DEBUG] Sample batch from parallel_dl_testBA:")
+        for batch in parallel_dl_testBA:
+            print(batch)
+            break
+    else:
+        print("[DEBUG] Sample batch from mono_dl_a_test:")
+        for batch in mono_dl_a_test:
+            print(batch)
+            break
+        print("[DEBUG] Sample batch from mono_dl_b_test:")
+        for batch in mono_dl_b_test:
+            print(batch)
+            break
 
 print('End checkpoint(s) test...')

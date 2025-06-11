@@ -45,20 +45,22 @@ TRAIN_PARAMS_PROVA=(
     --generator_model_tag facebook/mbart-large-50
     --discriminator_model_tag distilbert-base-multilingual-cased
     # --pretrained_classifier_model ./classifiers/paradetox/roberta-base_10/
-    --lambdas "1|10|1|1|0"
-    # --from_pretrained ./ckpts_cs_1e5_clip_1_10_1_1_0/epoch_24/
+    --lambdas "1|1|1|1|0"
+    # --from_pretrained ./ckpts_de_1e5_clip/epoch_24/
     --epochs 30
     --learning_rate 1e-5
     --max_sequence_length 64
     --batch_size 16
     --num_workers 1
-    --save_base_folder ./ckpts_cs_1e5_clip_1_10_1_1_0/
+    --save_base_folder ./ckpts_cs_1e5_clip_supervised/
     --save_steps 1
     --eval_strategy epochs
     --eval_steps 1
     --pin_memory
     --use_cuda_if_available
     --comet_logging
+    --supervised_training
+    --supervised_loss_weight 10
     # --comet_key ""
     # --comet_workspace ""
     # --comet_exp "c910b29ce9854515bf27119552481de9"

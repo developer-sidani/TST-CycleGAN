@@ -20,6 +20,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--max_samples_train', type=int, dest="max_samples_train", default=None, help='Max number of examples to retain from the training set. None for all available examples.')
 parser.add_argument('--max_samples_eval',  type=int, dest="max_samples_eval",  default=None, help='Max number of examples to retain from the evaluation set. None for all available examples.')
 parser.add_argument('--dataset_path', type=str, dest="dataset_path", help='Path to dataset base folder.')
+parser.add_argument('--lang1', type=str, dest="lang1", default='en', help='First language code (label 0, e.g., "en")')
+parser.add_argument('--lang2', type=str, dest="lang2", default='de', help='Second language code (label 1, e.g., "de")')
 
 parser.add_argument('--lowercase', action='store_true', dest="lowercase", default=False, help='Whether to lowercase data.')
 parser.add_argument('--max_sequence_length', type=int,  dest="max_sequence_length", default=64, help='Max sequence length')
@@ -63,9 +65,9 @@ dataset_name = args.dataset_path.split('/')[-2]
 output_path = args.save_base_folder + f"classifiers/{dataset_name}/{args.model_tag}_{args.epochs}/"
 output_dir, logging_dir = output_path+"checkpoints/", output_path+"logs/"
 
-x_train, y_train = read_data(args.dataset_path, 'train', args.max_samples_train, args.lowercase)
-x_eval, y_eval = read_data(args.dataset_path, 'dev', args.max_samples_eval, args.lowercase)
-x_test, y_test = read_data(args.dataset_path, 'test', None, args.lowercase)
+x_train, y_train = read_data(args.dataset_path, 'train', args.max_samples_train, args.lowercase, args.lang1, args.lang2)
+x_eval, y_eval = read_data(args.dataset_path, 'dev', args.max_samples_eval, args.lowercase, args.lang1, args.lang2)
+x_test, y_test = read_data(args.dataset_path, 'test', None, args.lowercase, args.lang1, args.lang2)
 
 print (f"Training set: {len(x_train)}")
 print (f"Evaluation set: {len(x_eval)}")

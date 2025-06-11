@@ -79,6 +79,8 @@ class CycleGANModel(nn.Module):
         target_sentences_ab: List[str] = None,
         target_sentences_ba: List[str] = None,
         lambdas: List[float] = None,
+        supervised_training: bool = False,
+        supervised_loss_weight: float = 1.0,
         comet_experiment = None,
         loss_logging = None,
         training_step: int = None
@@ -89,6 +91,15 @@ class CycleGANModel(nn.Module):
         # first half
         out_transferred_ab, transferred_ab = self.G_ab(sentences_a, device=self.device) 
         
+        # Compute supervised loss only if supervised training is enabled and target sentences are provided
+        loss_supervised_ab = None
+        if supervised_training and target_sentences_ab is not None:
+            print("Computing supervised loss A->B")
+            print("target_sentences_ab", target_sentences_ab)
+            print("transferred_ab", transferred_ab)
+            _, _, loss_supervised_ab = self.G_ab(transferred_ab, target_sentences_ab, device=self.device)
+        print("Debug: transferred_ab", transferred_ab)
+        print("Debug: target_sentences_ab", target_sentences_ab)
         # D_ab fake
         self.D_ab.eval() # this loss is only for the Generator
         zeros = torch.zeros(len(transferred_ab))
@@ -104,7 +115,6 @@ class CycleGANModel(nn.Module):
         
         # second half
         out_reconstructed_ba, reconstructed_ba, cycle_loss_aba = self.G_ba(transferred_ab, sentences_a, device=self.device)
-
         complete_loss_g_ab = lambdas[0]*cycle_loss_aba + lambdas[1]*loss_g_ab
         if comet_experiment is not None:
             with comet_experiment.train():
@@ -119,6 +129,15 @@ class CycleGANModel(nn.Module):
                 with comet_experiment.train():
                     comet_experiment.log_metric(f"Classifier-guided A-B", lambdas[4]*loss_g_ab_cls, step=training_step)
             loss_logging['Classifier-guided A-B'].append(lambdas[4]*loss_g_ab_cls.item())
+        
+        # Add supervised loss if enabled
+        if supervised_training and loss_supervised_ab is not None:
+            complete_loss_g_ab = complete_loss_g_ab + supervised_loss_weight * loss_supervised_ab
+            if comet_experiment is not None:
+                with comet_experiment.train():
+                    comet_experiment.log_metric(f"Supervised A-B", supervised_loss_weight * loss_supervised_ab, step=training_step)
+            if 'Supervised A-B' in loss_logging:
+                loss_logging['Supervised A-B'].append((supervised_loss_weight * loss_supervised_ab).item())
         
         complete_loss_g_ab.backward()
         
@@ -149,6 +168,16 @@ class CycleGANModel(nn.Module):
         # ---------- BEGIN : cycle B -> A ----------
         # first half
         out_transferred_ba, transferred_ba = self.G_ba(sentences_b, device=self.device)
+        
+        # Compute supervised loss only if supervised training is enabled and target sentences are provided
+        loss_supervised_ba = None
+        if supervised_training and target_sentences_ba is not None:
+            print("Computing supervised loss B->A")
+            print("target_sentences_ba", target_sentences_ba)
+            print("transferred_ba", transferred_ba)
+            _, _, loss_supervised_ba = self.G_ba(transferred_ba, target_sentences_ba, device=self.device)
+        print("Debug: transferred_ba", transferred_ba)
+        print("Debug: target_sentences_ba", target_sentences_ba)
 
         # D_ba
         self.D_ba.eval() # this loss is only for the Generator
@@ -178,6 +207,15 @@ class CycleGANModel(nn.Module):
                 with comet_experiment.train():
                     comet_experiment.log_metric(f"Classifier-guided B-A", lambdas[4]*loss_g_ba_cls, step=training_step)
             loss_logging['Classifier-guided B-A'].append(lambdas[4]*loss_g_ba_cls.item())
+        
+        # Add supervised loss if enabled
+        if supervised_training and loss_supervised_ba is not None:
+            complete_loss_g_ba = complete_loss_g_ba + supervised_loss_weight * loss_supervised_ba
+            if comet_experiment is not None:
+                with comet_experiment.train():
+                    comet_experiment.log_metric(f"Supervised B-A", supervised_loss_weight * loss_supervised_ba, step=training_step)
+            if 'Supervised B-A' in loss_logging:
+                loss_logging['Supervised B-A'].append((supervised_loss_weight * loss_supervised_ba).item())
         
         complete_loss_g_ba.backward()
 

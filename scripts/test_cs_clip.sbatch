@@ -25,19 +25,35 @@ echo "[SCRIPT]: Selected GPU ID: $CUDA_VISIBLE_DEVICES"
 source ~/.bashrc
 
 source ~/miniconda3/bin/activate
-conda activate cyclegan
+conda activate cliptrans
+
+cd ~/TST-CycleGAN
 
 send_discord "[${SLURM_JOB_ID}]: Starting Testing"
 
 
 
+# Get all checkpoint directories - use the new CLIPTrans checkpoint directory
+CKPT_BASE_DIR="/home/asidani/TST-CycleGAN/ckpts_cs_1e5_clip/"
 
-# Get all checkpoint directories
-CKPT_BASE_DIR="/home/asidani/TST-CycleGAN/ckpts_cs_1e5/"
+# Check if the checkpoint directory exists
+if [ ! -d "$CKPT_BASE_DIR" ]; then
+    send_discord "[${SLURM_JOB_ID}]: Error - Checkpoint directory not found: $CKPT_BASE_DIR"
+    exit 1
+fi
+
 CKPT_DIRS=($(find ${CKPT_BASE_DIR} -maxdepth 1 -type d -name "epoch_*" -printf "%f\n"))
 
+# Check if any checkpoint directories were found
+if [ ${#CKPT_DIRS[@]} -eq 0 ]; then
+    send_discord "[${SLURM_JOB_ID}]: Error - No epoch directories found in $CKPT_BASE_DIR"
+    exit 1
+fi
+
+send_discord "[${SLURM_JOB_ID}]: Found ${#CKPT_DIRS[@]} checkpoint directories"
+
+# test_ds=("2016_flickr" "2017_flickr" "2018_flickr" "2017_mscoco")
 test_ds=("2016_flickr")
-# test_ds=("2016_flickr")
 
 for ckpt_dir in "${CKPT_DIRS[@]}"; do
     send_discord "[${SLURM_JOB_ID}]: Testing with checkpoint ${ckpt_dir}"
@@ -61,6 +77,7 @@ for ckpt_dir in "${CKPT_DIRS[@]}"; do
             --use_cuda_if_available 
             --comet_logging
             --num_workers 1
+            --use_cliptrans
         )
         send_discord "[${SLURM_JOB_ID}]: Testing $ds with checkpoint ${ckpt_dir}"
         python test.py "${TEST_PARAMS[@]}"

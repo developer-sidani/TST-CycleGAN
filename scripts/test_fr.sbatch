@@ -1,18 +1,12 @@
 #!/bin/bash
-#SBATCH --time=110:00:00
+#SBATCH --time=00:59:59
 #SBATCH --ntasks=1
-#SBATCH --partition=cuda
+#SBATCH --partition=gpu_a40
 #SBATCH --gres=gpu:1
 #SBATCH --job-name=fr_test_cyclegan
 #SBATCH --mem=40GB
 #SBATCH --output=/home/asidani/logs/cyclegan/job_name_%j.log
 #SBATCH --error=/home/asidani/logs/cyclegan/job_name_%j.err
-
-
-
-###### 1 Load the module
-module load nvidia/cudasdk/11.6
-module load intel/python/3
 
 function send_discord {
     python3 /home/asidani/message.py "$@"
@@ -29,11 +23,10 @@ echo "[SCRIPT]: Selected GPU ID: $CUDA_VISIBLE_DEVICES"
 
 source ~/.bashrc
 
-source activate /home/asidani/.conda/envs/cliptrans
+source ~/miniconda3/bin/activate
+conda activate cyclegan
 
 send_discord "[${SLURM_JOB_ID}]: Starting Testing"
-
-PYTHON_PATH="/home/asidani/.conda/envs/cliptrans/bin/python3"
 
 
 
@@ -68,7 +61,7 @@ for ckpt_dir in "${CKPT_DIRS[@]}"; do
             --num_workers 1
         )
         send_discord "[${SLURM_JOB_ID}]: Testing $ds with checkpoint ${ckpt_dir}"
-        $PYTHON_PATH test.py "${TEST_PARAMS[@]}"
+        python test.py "${TEST_PARAMS[@]}"
     done
 done
 

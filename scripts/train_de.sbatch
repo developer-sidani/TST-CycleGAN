@@ -1,17 +1,13 @@
 #!/bin/bash
-#SBATCH --time=110:00:00
+#SBATCH --time=119:59:59
 #SBATCH --ntasks=1
-#SBATCH --partition=cuda
+#SBATCH --partition=smartdata_gpu
 #SBATCH --gres=gpu:1
-#SBATCH --job-name=de_train_cyclegan
+#SBATCH --job-name=cyclegan
 #SBATCH --mem=40GB
 #SBATCH --output=/home/asidani/logs/cyclegan/job_name_%j.log
 #SBATCH --error=/home/asidani/logs/cyclegan/job_name_%j.err
 
-
-###### 1 Load the module
-module load nvidia/cudasdk/11.6
-module load intel/python/3
 
 function send_discord {
     python3 /home/asidani/message.py "$@"
@@ -26,13 +22,15 @@ nvidia-smi || echo "Unable to run nvidia-smi"
 export CUDA_VISIBLE_DEVICES=$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits | awk '{ print NR-1 " " $1 }' | sort -k2 -n | tail -n1 | awk '{ print $1 }')
 echo "[SCRIPT]: Selected GPU ID: $CUDA_VISIBLE_DEVICES"
 
-source ~/.bashrc
 
-source activate /home/asidani/.conda/envs/cliptrans
+source ~/miniconda3/bin/activate
+conda activate cliptrans
+
+cd ~/TST-CycleGAN
 
 send_discord "[${SLURM_JOB_ID}]: Starting Training"
 
-PYTHON_PATH="/home/asidani/.conda/envs/cliptrans/bin/python3"
+
 
 
 TRAIN_PARAMS_PROVA=(
@@ -48,15 +46,15 @@ TRAIN_PARAMS_PROVA=(
     --shuffle
     --generator_model_tag facebook/mbart-large-50
     --discriminator_model_tag distilbert-base-multilingual-cased
-    # --pretrained_classifier_model ./classifiers/paradetox/roberta-base_10/
-    --lambdas "1|1|1|1|0"
-    # --from_pretrained /home/asidani/TST-CycleGAN/ckpts_de_3e5/epoch_8/
+    # --pretrained_classifier_model /home/asidani/TST-CycleGAN/classifier_de/classifiers/task1/distilbert-base-multilingual-cased_10/
+    --lambdas "1|10|1|1|0"
+    # --from_pretrained /home/asidani/TST-CycleGAN/ckpts_de_1e5_clip_new/epoch_26/
     --epochs 30
-    --learning_rate 3e-5
+    --learning_rate 1e-5
     --max_sequence_length 64
     --batch_size 16
     --num_workers 1
-    --save_base_folder ./ckpts_3e5/
+    --save_base_folder ./ckpts_de_1e5_clip_1_10_1_1_0/
     --save_steps 1
     --eval_strategy epochs
     --eval_steps 1
@@ -65,10 +63,12 @@ TRAIN_PARAMS_PROVA=(
     --comet_logging
     # --comet_key ""
     # --comet_workspace ""
-    # --comet_exp 0c64646eeb15495b8dbc04ccaad3db31
+    # --comet_exp 9ccd22c3a4a9444493e87d90d0ce2824
     # --comet_project_name ""
+    --use_cliptrans
+    --cliptrans_stage1_ckpt /home/asidani/CLIPTrans/models/
 )
-$PYTHON_PATH train.py "${TRAIN_PARAMS_PROVA[@]}"
+python train.py "${TRAIN_PARAMS_PROVA[@]}"
 
 
 
